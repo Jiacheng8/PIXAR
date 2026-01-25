@@ -7,5 +7,9 @@
 Xinyi Shang*, Yi Tang*, Jiacheng Cui*, Ahmed Elhagry, Salwa K. Al Khatib
 Sondos Mahmoud Bsharat, Jiacheng Liu, Xiaohan Zhao, Jing-Hao Xue, Hao Li, Salman Khan, Zhiqiang Shen<sup>†</sup>
 
+## Environment Setup
 
-## Abstract
+Please follow the steps below to set up the environment correctly.
+
+First, install all required dependencies listed in `requirements.txt`. After that, run the environment fixing scripts provided in the `fix/` directory. It is recommended to run `fix.sh` first. If it does not work properly, run `fix_again.sh` as a fallback to resolve remaining issues.
+

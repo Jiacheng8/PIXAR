@@ -793,7 +793,7 @@ def test(test_loader, model_engine, epoch, writer, args, sample_ratio=None):
         print(f"Pixel Precision: {pixel_precision:.4f}")
         print(f"Pixel Recall:    {pixel_recall:.4f}")
         print(f"Pixel F1:        {pixel_f1:.4f}")
-        print(f"Pixel PR-AUC:    {pixel_pr_auc:.4f}")
+        # print(f"Pixel PR-AUC:    {pixel_pr_auc:.4f}")
         print(f"Pixel ROC-AUC:   {pixel_roc_auc:.4f}")
         print(f"Classification Accuracy: {accuracy:.4f}%")
         print("\n[OBJ] Multi-Label Metrics:")
@@ -807,25 +807,25 @@ def test(test_loader, model_engine, epoch, writer, args, sample_ratio=None):
         print(f"IoU: {iou:.4f}")
         print(f"F1 Score: {f1_score:.4f}")
         print(f"Approximate AUC: {auc_approx:.4f}")
-        print(f"Total correct classifications: {correct}")
-        print(f"Total classification samples: {total}\n")
-        print("Per-Class Metrics:")
-        for class_name, metrics in per_class_metrics.items():
-            print(f"\n{class_name}:")
-            print(f"  Accuracy:  {metrics['accuracy']:.4f}")
-            print(f"  Precision: {metrics['precision']:.4f}")
-            print(f"  Recall:    {metrics['recall']:.4f}")
-            print(f"  F1 Score:  {metrics['f1']:.4f}")
-        print("\nConfusion Matrix:\nPredicted \nActual ")
-        print(f"{'':20}", end="")
-        for name in class_names:
-            print(f"{name:>12}", end="")
-        print()
-        for i, class_name in enumerate(class_names):
-            print(f"{class_name:20}", end="")
-            for j in range(num_classes):
-                print(f"{cm[i, j]:12.0f}", end="")
-            print()
+        # print(f"Total correct classifications: {correct}")
+        # print(f"Total classification samples: {total}\n")
+        # print("Per-Class Metrics:")
+        # for class_name, metrics in per_class_metrics.items():
+        #     print(f"\n{class_name}:")
+        #     print(f"  Accuracy:  {metrics['accuracy']:.4f}")
+        #     print(f"  Precision: {metrics['precision']:.4f}")
+        #     print(f"  Recall:    {metrics['recall']:.4f}")
+        #     print(f"  F1 Score:  {metrics['f1']:.4f}")
+        # print("\nConfusion Matrix:\nPredicted \nActual ")
+        # print(f"{'':20}", end="")
+        # for name in class_names:
+        #     print(f"{name:>12}", end="")
+        # print()
+        # for i, class_name in enumerate(class_names):
+        #     print(f"{class_name:20}", end="")
+        #     for j in range(num_classes):
+        #         print(f"{cm[i, j]:12.0f}", end="")
+        #     print()
 
     return accuracy, giou, ciou, per_class_metrics
 
