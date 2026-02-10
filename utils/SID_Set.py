@@ -303,14 +303,27 @@ class CustomDataset(torch.utils.data.Dataset):
         x = F.pad(x, (0, padw, 0, padh))
         return x
     
-    def _generate_response(self, cls_label, image_name):
+    def _generate_response(self, cls_label, image_name, text_description=None, has_obj_label=False):
         """Generate appropriate response based on image type and available description"""
         if cls_label == 0:
-            return "[CLS] The image is real"
+            response = "[CLS] The image is real"
         elif cls_label == 1:
-            return "[CLS] The image is full synthetic"
+            response = "[CLS] The image is full synthetic"
         else:  # cls_label == 2 (tampered)
-            return "[CLS] The image is tampered [SEG]"
+            # Put [OBJ] before [SEG] - more logical order
+            if has_obj_label:
+                response = "[CLS] The image is tampered [OBJ] [SEG]"
+            else:
+                response = "[CLS] The image is tampered [SEG]"
+
+        # Add text description if available (only for tampered images typically)
+        if text_description:
+            response = response + f" {text_description}"
+
+        # Add [END] token to mark sequence completion
+        response = response + " [END]"
+
+        return response
     
     def __getitem__(self, idx):
         image_path = self.images[idx]
@@ -331,8 +344,9 @@ class CustomDataset(torch.utils.data.Dataset):
         # Initialize mask placeholders
         mask = torch.zeros((1, resize[0], resize[1]))
         soft_mask = torch.zeros((1, resize[0], resize[1]))
-        
+
         obj_label_vec = None  # 多标签向量，默认None，仅tampered时赋值
+        text_description = None  # text description，默认None
 
         # Load mask for tampered
         if cls_labels == 2:
@@ -360,13 +374,17 @@ class CustomDataset(torch.utils.data.Dataset):
                 print(f"Soft mask not found for: {image_name}, using hard mask as fallback.")
                 soft_mask = mask.clone()
             
-            # === 读取 tamper 元数据，产出 multi-hot 向量 ===
+            # === 读取 tamper 元数据，产出 multi-hot 向量和 text description ===
             meta_path = os.path.join(self.base_image_dir, self.split, "metadata", f"{base_name}_cls.json")
+            text_description = None
             try:
                 with open(meta_path, "r") as f:
                     meta = json.load(f)
                 # 现在 cls 是一个 list（可能是类名字符串，也可能是类索引），不再用 [0]
                 cls_list = meta.get("cls", [])
+                # 读取 text description
+                text_description = meta.get("text", None)
+
                 # 构造 multi-hot 向量
                 vec = torch.zeros(self.num_obj_classes, dtype=torch.float32)
                 for c in cls_list:
@@ -384,28 +402,30 @@ class CustomDataset(torch.utils.data.Dataset):
                         print(f"[WARN] Unsupported class entry {c} for {base_name}")
                 # 若列表为空，则保持 None；否则赋值
                 obj_label_vec = vec if vec.sum() > 0 else None
-                
+
             except Exception as e:
                 print(f"[WARN] fail to read metadata for {base_name}: {e}")
                 obj_label_vec = None
+                text_description = None
 
 
         # Generate conversation
         conv = conversation_lib.default_conversation.copy()
-        conv.append_message(conv.roles[0], 
-            f"{DEFAULT_IMAGE_TOKEN}\nCan you identify whether this image is real, fully synthetic, or tampered? If it is tampered, please (1) output a mask for the modified regions and (2) classify which object was modified.")
-        
-        response = self._generate_response(cls_labels, image_name)
-        
-            
-        # === 改成 ===
-        if cls_labels == 2 and obj_label_vec is not None:
-            response = response + " [OBJ]"
+        conv.append_message(conv.roles[0],
+            f"{DEFAULT_IMAGE_TOKEN}\nCan you identify whether this image is real, fully synthetic, or tampered? If it is tampered, please (1) classify which object was modified and (2) output a mask for the modified regions.")
+
+        # Generate response with proper token order: [CLS] ... [OBJ] [SEG] description
+        has_obj = (cls_labels == 2 and obj_label_vec is not None)
+        response = self._generate_response(cls_labels, image_name, text_description, has_obj_label=has_obj)
+
         conv.append_message(conv.roles[1], response)
         conversation = conv.get_prompt()
-        has_text = None
+
+        # Set has_text flag: True if text description exists and is not empty
+        has_text = (text_description is not None and text_description.strip() != "")
+
         labels = torch.ones(mask.shape[1], mask.shape[2]) * self.ignore_label
-        
+
         return image_path, image, image_clip, [conversation], mask, soft_mask, labels, cls_labels, resize, None, None, False, has_text, obj_label_vec
 
 

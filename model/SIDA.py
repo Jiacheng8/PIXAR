@@ -148,12 +148,13 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
         else:
             config.mm_vision_tower = config.vision_tower
 
-        self.ce_loss_weight = kwargs.pop("ce_loss_weight", None)
-        self.dice_loss_weight = kwargs.pop("dice_loss_weight", None)
-        self.bce_loss_weight = kwargs.pop("bce_loss_weight", None)
-        self.cls_loss_weight = kwargs.pop("cls_loss_weight", None)
-        self.mask_loss_weight =  kwargs.pop("mask_loss_weight", None)
+        self.ce_loss_weight = kwargs.pop("ce_loss_weight", 1.0)
+        self.dice_loss_weight = kwargs.pop("dice_loss_weight", 1.0)
+        self.bce_loss_weight = kwargs.pop("bce_loss_weight", 1.0)
+        self.cls_loss_weight = kwargs.pop("cls_loss_weight", 1.0)
+        self.mask_loss_weight =  kwargs.pop("mask_loss_weight", 1.0)
         self.obj_loss_weight = kwargs.pop("obj_loss_weight", 1.0)
+        self.text_loss_weight = kwargs.pop("text_loss_weight", 1.0)  # NEW: text loss weight
         self.obj_token_idx   = kwargs.pop("obj_token_idx", None)
         config.num_obj_classes = kwargs.pop("num_obj_classes", 81)
         
@@ -258,6 +259,7 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
             output_hidden_states_list.append(output_hidden_states_level)
             output_hidden_states = output_hidden_states_list
             output = None
+            text_loss = torch.tensor(0.0, device=images.device)  # No text loss in inference mode
         else:
             images_clip_list = []
             for i in range(len(offset) - 1):
@@ -276,8 +278,20 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
                 input_ids=input_ids,
                 labels = labels,
                 output_hidden_states=True,
-            )  
+            )
             output_hidden_states = output.hidden_states
+
+            # Extract text loss (language modeling loss) from LLM output
+            # Only compute text_loss for tampered images (cls_labels == 2)
+            # Real and full_synthetic images don't need text generation supervision
+            if (cls_labels == 2).any():  # If there are any tampered images in the batch
+                if hasattr(output, 'loss') and output.loss is not None:
+                    text_loss = output.loss if not torch.isnan(output.loss) else torch.tensor(0.0, device=images.device)
+                else:
+                    text_loss = torch.tensor(0.0, device=images.device)
+            else:
+                # No tampered images in batch - skip text loss
+                text_loss = torch.tensor(0.0, device=images.device)
             
         # Geting cls information
         assert len(self.model.cls_head) == 1
@@ -449,9 +463,9 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
                 self.model.sida_fc1.parameters(), 
                 self.model.attention_layer.parameters()):
                 dummy = dummy + p.sum() * 0.0      
-            mask_loss = mask_loss + dummy 
+            mask_loss = mask_loss + dummy
 
-        loss = self.mask_loss_weight * mask_loss + self.cls_loss_weight * cls_loss + self.obj_loss_weight * obj_loss
+        loss = self.mask_loss_weight * mask_loss + self.cls_loss_weight * cls_loss + self.obj_loss_weight * obj_loss + self.text_loss_weight * text_loss
 
         # === 统一的 inference 返回口 ===        
         if inference:
@@ -478,6 +492,7 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
             "mask_loss": mask_loss,
             "cls_loss": cls_loss,
             "obj_loss": obj_loss,
+            "text_loss": text_loss,  # NEW: text loss
             "logits": logits,
             "cls_hidden_state": cls_result,
         }

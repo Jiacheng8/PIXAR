@@ -13,6 +13,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import hashlib
+import csv
 
 
 def sync_ai_image_size(ai_image_path: str, real_image_path: str) -> bool:
@@ -87,8 +88,63 @@ def hash_file(path: str, length: int = 16) -> str:
     return h.hexdigest()[:length]
 
 
+def load_descriptions(csv_path: str) -> dict:
+    """
+    加载 descriptions.csv 文件，返回一个字典：
+    {
+        "workspace": {
+            "image_id": {
+                "ann_id": "description text"
+            }
+        }
+    }
+    对于没有 ann_id 的情况，使用 "-1" 作为 key
+    """
+    descriptions = {}
+
+    if not os.path.exists(csv_path):
+        print(f"Warning: descriptions.csv not found at {csv_path}, text field will be empty.")
+        return descriptions
+
+    print(f"Loading descriptions from {csv_path}...")
+
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            workspace = row['workspace']
+            image_id = row['image_id']
+            ann_id = row['ann_id']  # 可能是 "-1" 或具体值
+            description = row['descriptions']
+
+            if workspace not in descriptions:
+                descriptions[workspace] = {}
+            if image_id not in descriptions[workspace]:
+                descriptions[workspace][image_id] = {}
+
+            descriptions[workspace][image_id][ann_id] = description
+
+    print(f"Loaded descriptions for {len(descriptions)} workspaces.")
+    return descriptions
+
+
+def get_description(descriptions: dict, workspace: str, image_id: str, ann_id: str = None) -> str:
+    """
+    从 descriptions 字典中获取对应的描述文本
+    """
+    if workspace not in descriptions:
+        return ""
+
+    if image_id not in descriptions[workspace]:
+        return ""
+
+    # 如果没有 ann_id，使用 "-1"
+    lookup_ann_id = ann_id if ann_id else "-1"
+
+    return descriptions[workspace][image_id].get(lookup_ann_id, "")
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Unified dataset construction script with configurable structure.")
+    ap = argparse.ArgumentParser(description="Unified dataset construction script with text descriptions.")
     ap.add_argument("--id", required=True, help="Dataset ID under dataset-dir.")
     ap.add_argument("--dataset-dir", default="/workspace/dataset/raw_outputs_training", help="Path to the dataset directory.")
     ap.add_argument("--output-dir", default="/workspace/dataset/demo", help="Directory to save filtered dataset.")
@@ -97,7 +153,11 @@ def main():
     ap.add_argument("--num-workers", type=int, default=None, help="Number of worker threads (default: 2 * CPU cores, capped at 32).")
     ap.add_argument("--anno", action="store_true", help="Enable annotation mode (nested name/ann_id structure).")
     ap.add_argument("--bg", action="store_true", help="Mark as background dataset (for tracking purposes).")
+    ap.add_argument("--descriptions-csv", default="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions.csv", help="Path to descriptions.csv file.")
     args = ap.parse_args()
+
+    # 加载 descriptions
+    descriptions = load_descriptions(args.descriptions_csv)
 
     # 修改 output_dir 以包含 tao 值
     args.output_dir = f"{args.output_dir}_{args.tao}"
@@ -240,13 +300,22 @@ def main():
             dst_meta = os.path.join(args.output_dir, dest_type, "metadata", tampered_meta_filename)
             dst_real_image = os.path.join(args.output_dir, dest_type, "real", real_filename)
 
-            # 写 metadata
+            # 写 metadata (包含 cls 和 text)
             try:
                 with open(cls_info_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     cls_info = data.get("replacement_categories", [])
+
+                # 获取描述文本
+                # ann_id 格式可能是 "ann_1227626_1438517"，需要去掉 "ann_" 前缀
+                ann_id_for_lookup = ann_id.replace("ann_", "") if ann_id.startswith("ann_") else ann_id
+                text_description = get_description(descriptions, args.id, name, ann_id_for_lookup)
+
                 with open(dst_meta, "w", encoding="utf-8") as wf:
-                    json.dump({"cls": cls_info}, wf, ensure_ascii=False, indent=2)
+                    json.dump({
+                        "cls": cls_info,
+                        "text": text_description
+                    }, wf, ensure_ascii=False, indent=2)
             except Exception as e:
                 tqdm.write(f"Error writing metadata for {entry}: {e}")
                 return 0
@@ -358,13 +427,20 @@ def main():
             dst_meta = os.path.join(args.output_dir, dest_type, "metadata", tampered_meta_filename)
             dst_real_image = os.path.join(args.output_dir, dest_type, "real", real_filename)
 
-            # 写 metadata
+            # 写 metadata (包含 cls 和 text)
             try:
                 with open(cls_info_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     cls_info = data.get("replacement_categories", [])
+
+                # 获取描述文本（wo-anno 使用 "-1" 作为 ann_id）
+                text_description = get_description(descriptions, args.id, name, "-1")
+
                 with open(dst_meta, "w", encoding="utf-8") as wf:
-                    json.dump({"cls": cls_info}, wf, ensure_ascii=False, indent=2)
+                    json.dump({
+                        "cls": cls_info,
+                        "text": text_description
+                    }, wf, ensure_ascii=False, indent=2)
             except Exception as e:
                 tqdm.write(f"Error writing metadata for {entry}: {e}")
                 return 0

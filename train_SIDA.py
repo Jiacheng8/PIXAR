@@ -76,6 +76,7 @@ def parse_args(args):
     parser.add_argument("--bce_loss_weight", default=1.0, type=float)
     parser.add_argument("--cls_loss_weight", default=1.0, type=float)
     parser.add_argument("--mask_loss_weight", default=1.0, type=float)
+    parser.add_argument("--text_loss_weight", default=1.0, type=float, help="Weight for text generation loss")
     parser.add_argument("--lora_alpha", default=16, type=int)
     parser.add_argument("--lora_dropout", default=0.05, type=float)
     parser.add_argument("--lora_target_modules", default="q_proj,v_proj", type=str)
@@ -146,11 +147,15 @@ def main(args):
     num_added_token = tokenizer.add_tokens("[SEG]")
     # === NEW: add <OBJ> token ===
     num_added_token = tokenizer.add_tokens("[OBJ]")
-    
+    # === NEW: add <END> token ===
+    num_added_token = tokenizer.add_tokens("[END]")
+
     args.cls_token_idx = tokenizer("[CLS]", add_special_tokens=False).input_ids[0]
     args.seg_token_idx = tokenizer("[SEG]", add_special_tokens=False).input_ids[0]
     # === NEW: record <OBJ> token index ===
     args.obj_token_idx = tokenizer("[OBJ]", add_special_tokens=False).input_ids[0]
+    # === NEW: record <END> token index ===
+    args.end_token_idx = tokenizer("[END]", add_special_tokens=False).input_ids[0]
     if args.use_mm_start_end:
         tokenizer.add_tokens(
             [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True
@@ -164,6 +169,7 @@ def main(args):
         "ce_loss_weight": args.ce_loss_weight,
         "dice_loss_weight": args.dice_loss_weight,
         "bce_loss_weight": args.bce_loss_weight,
+        "text_loss_weight": args.text_loss_weight,  # NEW: text loss weight
         "cls_token_idx": args.cls_token_idx,
         "seg_token_idx": args.seg_token_idx,
         "obj_token_idx": args.obj_token_idx,
@@ -429,7 +435,7 @@ def main(args):
         acc, giou, ciou, _ = validate(val_loader, model_engine, 0, writer, args)  # Classification validation
         exit()
 
-    validation_epochs = [1,2,3,4,5,6,7,8,9,10]
+    validation_epochs = [10, 20, 30 ,40 ,50, 60, 70,80, 90, 99]  # Perform validation at these epochs
     if args.local_rank == 0:
         print(f"\nTraining Configuration:")
         print(f"Total epochs: {args.epochs}")
@@ -510,9 +516,10 @@ def train(
     mask_dice_losses = AverageMeter("MaskDICELoss", ":.4f")
     mask_losses = AverageMeter("MaskLoss", ":.4f")
     obj_losses = AverageMeter("ObjLoss", ":.4f")
+    text_losses = AverageMeter("TextLoss", ":.4f")  # NEW: text loss meter
     progress = ProgressMeter(
         args.steps_per_epoch,
-        [batch_time, losses, cls_losses, mask_bce_losses, mask_dice_losses, mask_losses, obj_losses],
+        [batch_time, losses, cls_losses, mask_bce_losses, mask_dice_losses, mask_losses, obj_losses, text_losses],
         prefix="Epoch: [{}]".format(epoch),
     )
     model.train()
@@ -544,6 +551,7 @@ def train(
             mask_dice_loss = output_dict["mask_dice_loss"]
             mask_loss = output_dict["mask_loss"]
             obj_loss = output_dict.get("obj_loss", torch.tensor(0.0, device=loss.device))  # 兼容无返回
+            text_loss = output_dict.get("text_loss", torch.tensor(0.0, device=loss.device))  # NEW: text loss
             losses.update(loss.item(), input_dict["images"].size(0))
             cls_losses.update(cls_loss.item(), input_dict["images"].size(0))
             if input_dict['cls_labels'][0] == 2:
@@ -555,6 +563,9 @@ def train(
                 # 建议用 N_obj（行数）作为计数；若想按元素数，保留原写法也可
                 n_obj = input_dict["obj_labels"].shape[0]
                 obj_losses.update(obj_loss.item(), max(n_obj, 1))
+            # TEXT: 更新 text loss（当有 text description 时）
+            if text_loss.item() > 0:
+                text_losses.update(text_loss.item(), input_dict["images"].size(0))
 
                 
             model.backward(loss)
@@ -572,7 +583,8 @@ def train(
                 mask_bce_losses.all_reduce()
                 mask_dice_losses.all_reduce()
                 mask_losses.all_reduce()
-                obj_losses.all_reduce()   # <<< 加上
+                obj_losses.all_reduce()
+                text_losses.all_reduce()  # NEW: text loss
 
             if args.local_rank == 0:
                 progress.display(global_step + 1)
@@ -583,7 +595,8 @@ def train(
                 writer.add_scalar("train/mask_loss", mask_losses.avg, global_step)
                 writer.add_scalar("metrics/total_secs_per_batch", batch_time.avg, global_step)
                 writer.add_scalar("metrics/data_secs_per_batch", data_time.avg, global_step)
-                writer.add_scalar("train/obj_loss", obj_losses.avg, global_step)  # <<< 加上
+                writer.add_scalar("train/obj_loss", obj_losses.avg, global_step)
+                writer.add_scalar("train/text_loss", text_losses.avg, global_step)  # NEW: text loss
             batch_time.reset()
             data_time.reset()
             losses.reset()
@@ -591,7 +604,8 @@ def train(
             mask_bce_losses.reset()
             mask_dice_losses.reset()
             mask_losses.reset()
-            obj_losses.reset()  # <<< 加上
+            obj_losses.reset()
+            text_losses.reset()  # NEW: text loss
 
         if global_step != 0:
             curr_lr = scheduler.get_last_lr()

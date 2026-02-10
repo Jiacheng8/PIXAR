@@ -66,16 +66,19 @@ def main(argv):
     )
     tokenizer.pad_token = tokenizer.unk_token
 
-    # 训练顺序：CLS -> SEG -> OBJ -> (im_start, im_end)
+    # 训练顺序：CLS -> SEG -> OBJ -> END -> (im_start, im_end)
+    # 顺序必须与 train_SIDA.py, test.py, chat.py 保持一致
     tokenizer.add_tokens("[CLS]")
     tokenizer.add_tokens("[SEG]")
-    tokenizer.add_tokens("[OBJ]")  # << 新增，并且在加载权重前加入
+    tokenizer.add_tokens("[OBJ]")
+    tokenizer.add_tokens("[END]")  # << 新增：序列结束标记
     if args.use_mm_start_end:
         tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
 
     cls_token_idx = tokenizer("[CLS]", add_special_tokens=False).input_ids[0]
     seg_token_idx = tokenizer("[SEG]", add_special_tokens=False).input_ids[0]
     obj_token_idx = tokenizer("[OBJ]", add_special_tokens=False).input_ids[0]
+    end_token_idx = tokenizer("[END]", add_special_tokens=False).input_ids[0]
 
     # ------ 2) 构建模型（与训练侧一致）------
     dtype = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}[args.precision]
@@ -84,7 +87,8 @@ def main(argv):
         "out_dim": args.out_dim,
         "seg_token_idx": seg_token_idx,
         "cls_token_idx": cls_token_idx,
-        "obj_token_idx": obj_token_idx,  # 传入 OBJ 的 id（虽然合并时用不到，但保持一致）
+        "obj_token_idx": obj_token_idx,
+        # end_token_idx 在当前模型中可能不直接使用，但保持一致性
         "vision_tower": args.vision_tower,
         # 若训练时显式设置了 num_obj_classes，这里也可传；默认 81
         # "num_obj_classes": 81,

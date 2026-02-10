@@ -90,6 +90,16 @@ def parse_args(args):
     parser.add_argument("--log_obj_prefix", type=str, default="obj",
                         help="TensorBoard tag prefix for OBJ multi-label metrics")
 
+    # === NEW: Text generation arguments ===
+    parser.add_argument("--generate_text", action="store_true", default=False,
+                        help="Enable text generation during inference (slower)")
+    parser.add_argument("--max_new_tokens", type=int, default=128,
+                        help="Maximum number of tokens to generate")
+    parser.add_argument("--save_generated_text", action="store_true", default=False,
+                        help="Save generated text to a JSON file")
+    parser.add_argument("--text_output_file", type=str, default="generated_texts.json",
+                        help="Output file for generated texts")
+
     return parser.parse_args(args)
 
 def main(args):
@@ -114,9 +124,11 @@ def main(args):
     tokenizer.add_tokens("[CLS]")
     tokenizer.add_tokens("[SEG]")
     tokenizer.add_tokens("[OBJ]")  # NEW
+    tokenizer.add_tokens("[END]")  # NEW
     args.cls_token_idx = tokenizer("[CLS]", add_special_tokens=False).input_ids[0]
     args.seg_token_idx = tokenizer("[SEG]", add_special_tokens=False).input_ids[0]
     args.obj_token_idx = tokenizer("[OBJ]", add_special_tokens=False).input_ids[0]  # NEW
+    args.end_token_idx = tokenizer("[END]", add_special_tokens=False).input_ids[0]  # NEW
     if args.use_mm_start_end:
         tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
 
@@ -349,7 +361,7 @@ def main(args):
     best_acc, best_score, cur_ciou = 0.0, 0.0, 0.0
 
     if args.test_only:
-        acc, giou, ciou, _ = test(test_loader, model_engine, 0, writer, args)
+        acc, giou, ciou, _ = test(test_loader, model_engine, 0, writer, args, tokenizer)
         sys.exit(0)
 
     test_epochs = [1, 3, 5, 7, 10]
@@ -366,7 +378,7 @@ def main(args):
             if args.local_rank == 0:
                 print(f"\nPerforming test after epoch {epoch + 1}")
             if not args.no_test:
-                acc, giou, ciou, _ = test(test_loader, model_engine, epoch, writer, args)
+                acc, giou, ciou, _ = test(test_loader, model_engine, epoch, writer, args, tokenizer)
                 best_score = max(giou, best_score)
                 is_best_iou = giou > best_score
                 cur_ciou = ciou if is_best_iou else cur_ciou
@@ -483,7 +495,7 @@ def train(train_loader, model, epoch, scheduler, writer, train_iter, args):
     return train_iter
 
 
-def test(test_loader, model_engine, epoch, writer, args, sample_ratio=None):
+def test(test_loader, model_engine, epoch, writer, args, tokenizer=None, sample_ratio=None):
     model_engine.eval()
     correct = 0; total = 0
     num_classes = 3
@@ -506,6 +518,16 @@ def test(test_loader, model_engine, epoch, writer, args, sample_ratio=None):
     BINS = 512
     pos_hist = torch.zeros(BINS, device='cuda', dtype=torch.float64)
     neg_hist = torch.zeros(BINS, device='cuda', dtype=torch.float64)
+
+    # --- NEW: Text generation storage ---
+    generated_texts = [] if args.generate_text else None
+
+    # Check tokenizer is provided when text generation is enabled
+    if args.generate_text and tokenizer is None:
+        raise ValueError("Tokenizer must be provided when generate_text is enabled")
+
+    if args.generate_text and args.local_rank == 0:
+        print("\n🔤 Text generation enabled with max_new_tokens =", args.max_new_tokens)
 
     total_batches = len(test_loader)
     if sample_ratio is not None:
@@ -543,14 +565,77 @@ def test(test_loader, model_engine, epoch, writer, args, sample_ratio=None):
             input_dict["images"] = input_dict["images"].float()
             input_dict["images_clip"] = input_dict["images_clip"].float()
 
-        input_dict['inference'] = True
-        with torch.no_grad():
-            output_dict = model_engine(**input_dict)
+        # ------ Text generation or standard inference ------
+        if args.generate_text:
+            # Use evaluate() method for text generation
+            from model.llava.constants import IMAGE_TOKEN_INDEX
 
-        # ------ classification ------
-        logits = output_dict["logits"]
-        probs = F.softmax(logits, dim=1)
-        preds = torch.argmax(probs, dim=1)
+            with torch.no_grad():
+                # Extract base model from DeepSpeed wrapper
+                base_model = model_engine.module if hasattr(model_engine, 'module') else model_engine
+
+                output_ids, pred_masks = base_model.evaluate(
+                    input_dict["images_clip"],
+                    input_dict["images"],
+                    input_dict["input_ids"],
+                    input_dict["resize_list"],
+                    [input_dict["label_list"][i].shape for i in range(len(input_dict["label_list"]))],
+                    max_new_tokens=args.max_new_tokens,
+                    tokenizer=tokenizer,
+                )
+
+                # Decode generated text
+                output_ids = output_ids[0][output_ids[0] != IMAGE_TOKEN_INDEX]
+                text_output = tokenizer.decode(output_ids, skip_special_tokens=False)
+                text_output = text_output.replace("\n", " ").replace("  ", " ").strip()
+
+                # Store generated text
+                generated_texts.append({
+                    "image_path": input_dict["image_paths"][0],
+                    "generated_text": text_output,
+                    "ground_truth_label": cls_labels.item() if hasattr(cls_labels, 'item') else int(cls_labels),
+                })
+
+                if batch_idx < 5 and args.local_rank == 0:  # Print first 5 examples
+                    print(f"\n[Generated Text {batch_idx}]")
+                    print(f"Image: {input_dict['image_paths'][0]}")
+                    print(f"Generated: {text_output}")
+
+                # For text generation mode, we need to extract predictions from generated text
+                # Parse the CLS token prediction from generated text
+                if "[CLS]" in text_output:
+                    # Simple heuristic: check which class is mentioned
+                    text_lower = text_output.lower()
+                    if "real" in text_lower and "synthetic" not in text_lower and "tampered" not in text_lower:
+                        pred_class = 0
+                    elif "full synthetic" in text_lower or "fully synthetic" in text_lower:
+                        pred_class = 1
+                    elif "tampered" in text_lower:
+                        pred_class = 2
+                    else:
+                        pred_class = 0  # Default to real
+                    preds = torch.tensor([pred_class], device='cuda')
+                else:
+                    preds = torch.tensor([0], device='cuda')  # Default
+
+                # Create output_dict compatible with downstream code
+                output_dict = {
+                    "logits": F.one_hot(preds, num_classes=3).float(),
+                    "pred_masks": pred_masks if pred_masks else [],
+                    "gt_soft_masks": input_dict["soft_masks_list"],
+                    "obj_logits": torch.empty((0, args.num_obj_classes), device='cuda'),  # Placeholder
+                }
+        else:
+            # Standard inference without text generation
+            input_dict['inference'] = True
+            with torch.no_grad():
+                output_dict = model_engine(**input_dict)
+
+            # ------ classification ------
+            logits = output_dict["logits"]
+            probs = F.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
         cls_labels = input_dict["cls_labels"]
         correct += (preds == cls_labels).sum().item()
         total += cls_labels.size(0)
@@ -761,6 +846,15 @@ def test(test_loader, model_engine, epoch, writer, args, sample_ratio=None):
     avg_precision = np.mean([metrics['precision'] for metrics in per_class_metrics.values()])
     avg_recall = np.mean([metrics['recall'] for metrics in per_class_metrics.values()])
     auc_approx = avg_precision * avg_recall
+
+    # --- NEW: Save generated texts if enabled ---
+    if args.generate_text and args.save_generated_text and generated_texts and args.local_rank == 0:
+        import json
+        output_path = os.path.join(args.log_dir, args.text_output_file)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(generated_texts, f, indent=2, ensure_ascii=False)
+        print(f"\n✅ Generated texts saved to: {output_path}")
+        print(f"Total texts generated: {len(generated_texts)}")
 
     if args.local_rank == 0 and writer is not None:
         writer.add_scalar("test/accuracy", accuracy, epoch)

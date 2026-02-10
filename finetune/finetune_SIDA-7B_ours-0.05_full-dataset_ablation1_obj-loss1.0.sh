@@ -19,18 +19,19 @@
 # 5) 日志与输出：
 #    --exp_name          实验名称（用于 runs 目录下区分不同实验）
 #    --log_base_dir      TensorBoard 与 checkpoint 的保存根目录
+mkdir -p ./finetune/logs
 
-deepspeed --include localhost:3 --master_port=12347 train_SIDA.py \
-  --version="/data/ironman/jiacheng/Omni_data/ck/SIDA-7B" \
-  --dataset_dir='/data/ironman/jiacheng/Omni_data/final_dataset/ours_0.05' \
-  --vision_pretrained="/data/ironman/jiacheng/Omni_data/ck/sam_vit_h_4b8939.pth" \
-  --val_dataset="/data/ironman/jiacheng/Omni_data/final_dataset/ours_0.05/validation" \
+deepspeed --include localhost:2 --master_port=12348 train_SIDA.py \
+  --version="/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B" \
+  --dataset_dir='/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05' \
+  --vision_pretrained="/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth" \
+  --val_dataset="/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation" \
   --batch_size=2 \
-  --exp_name="finetune_SIDA-7B_ours-0.05_full-dataset_ablation2_obj-loss0.1" \
+  --exp_name="finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss1" \
   --epochs=10 \
   --dice_loss_weight 1.0 \
-  --obj_loss_weight 0.1 \
-  --steps_per_epoch=1000 \
+  --obj_loss_weight 1.0 \
+  --steps_per_epoch=10000 \
   --precision="bf16" \
   --lr=0.0001 \
-  --log_base_dir='/data/ironman/jiacheng/Omni_data/runs' \
+  --log_base_dir='/data/ironman/jiacheng/final_Omni_Data/runs' > ./finetune/logs/finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss1.log 2>&1 &
