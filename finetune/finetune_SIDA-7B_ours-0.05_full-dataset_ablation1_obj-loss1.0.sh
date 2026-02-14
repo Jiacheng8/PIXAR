@@ -21,17 +21,17 @@
 #    --log_base_dir      TensorBoard 与 checkpoint 的保存根目录
 mkdir -p ./finetune/logs
 
-deepspeed --include localhost:2 --master_port=12348 train_SIDA.py \
+deepspeed --include localhost:1 --master_port=12348 train_SIDA.py \
   --version="/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B" \
   --dataset_dir='/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05' \
   --vision_pretrained="/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth" \
   --val_dataset="/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation" \
   --batch_size=2 \
   --exp_name="finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss1" \
-  --epochs=10 \
+  --epochs=100 \
   --dice_loss_weight 1.0 \
   --obj_loss_weight 1.0 \
-  --steps_per_epoch=10000 \
+  --steps_per_epoch=1000 \
   --precision="bf16" \
   --lr=0.0001 \
   --log_base_dir='/data/ironman/jiacheng/final_Omni_Data/runs' > ./finetune/logs/finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss1.log 2>&1 &

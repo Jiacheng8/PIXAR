@@ -20,7 +20,7 @@
 #    --exp_name          实验名称（用于 runs 目录下区分不同实验）
 #    --log_base_dir      TensorBoard 与 checkpoint 的保存根目录
 
-deepspeed --include localhost:3 --master_port=12350 train_SIDA.py \
+deepspeed --include localhost:3 --master_port=12450 train_SIDA.py \
   --version="/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B" \
   --dataset_dir='/data/ironman/jiacheng/final_Omni_Data/train/ours_mask-only_0.05' \
   --vision_pretrained="/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth" \

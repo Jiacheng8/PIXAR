@@ -574,7 +574,7 @@ def test(test_loader, model_engine, epoch, writer, args, tokenizer=None, sample_
                 # Extract base model from DeepSpeed wrapper
                 base_model = model_engine.module if hasattr(model_engine, 'module') else model_engine
 
-                output_ids, pred_masks = base_model.evaluate(
+                output_ids, pred_masks, obj_preds = base_model.evaluate(
                     input_dict["images_clip"],
                     input_dict["images"],
                     input_dict["input_ids"],

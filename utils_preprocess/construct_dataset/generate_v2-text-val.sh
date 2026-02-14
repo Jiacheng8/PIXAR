@@ -8,7 +8,7 @@ cd /home/jiacheng/Omni_detection/PIXAR/utils_preprocess/construct_dataset || exi
 # Config
 # -------------------------
 DATASET_DIR="/data/ironman/jiacheng/final_Omni_Data/raw_outputs"
-OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/train/ours_mask-only"
+OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/test/ours"
 DESCRIPTIONS_CSV="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions.csv"
 
 TAOS=(0.05)
@@ -16,33 +16,25 @@ TAOS=(0.05)
 # 控制是否处理 validation mock (注入到 trainset 目录)
 PROCESS_VAL_MOCK=true  # 设置为 false 可以跳过 validation mock 处理
 
-# ===== Train 数据集分组 =====
-train_w_anno_ids=(
-  coco_train_inter_replacement_1
-  coco_train_inter_replacement_2
-  coco_train_replacement_1
-  coco_train_replacement_2
-)
-
-train_w_anno_bg_ids=(
-  coco_train_removal_1
-)
-
-
 # ===== Validation Mock 数据集分组 =====
-val_wo_anno_bg_ids=(
-  coco_val_background  # 如果需要可以取消注释
-)
-
 val_w_anno_ids=(
   coco_val_inter_replacement_1
   coco_val_inter_replacement_2
   coco_val_replacement_1
   coco_val_replacement_2
+  flux2_coco_val_inter_replacement_1
+  flux2_coco_val_replacement_1
+  gemini_coco_val_inter_replacement_1
+  gemini_coco_val_replacement_1
+  seedream_coco_val_inter_replacement_1
+  seedream_coco_val_replacement_1
 )
 
 val_w_anno_bg_ids=(
   coco_val_removal_1
+  flux2_coco_val_removal_1
+  gemini_coco_val_removal_1
+  seedream_coco_val_removal_1
 )
 
 val_wo_anno_ids=(
@@ -50,10 +42,25 @@ val_wo_anno_ids=(
   coco_val_color
   coco_val_motion
   coco_val_material
+  flux2_coco_val_addition
+  flux2_coco_val_color
+  flux2_coco_val_material
+  flux2_coco_val_motion
+  gemini_coco_val_addition
+  gemini_coco_val_color
+  gemini_coco_val_material
+  gemini_coco_val_motion
+  seedream_coco_val_addition
+  seedream_coco_val_color
+  seedream_coco_val_material
+  seedream_coco_val_motion
 )
 
 val_wo_anno_bg_ids=(
-  # coco_val_background  # 如果需要可以取消注释
+  coco_val_background
+  flux2_coco_val_background
+  gemini_coco_val_background
+  seedream_coco_val_background
 )
 
 # -------------------------
@@ -145,27 +152,29 @@ log "🔧 Using unified script: 2_construct_dataset_text.py"
 log "🔧 Process validation mock: ${PROCESS_VAL_MOCK}"
 
 for tao in "${TAOS[@]}"; do
-  # ========== Process Train Data ==========
-  h1 "TAO=${tao} | Processing TRAIN data"
-
-  h2 "TAO=${tao} | Train w/ anno (--anno)"
-  for id in "${train_w_anno_ids[@]}"; do
-    run_one "$id" "$tao" "true" "false" "train"
-  done
-
-
-  h2 "TAO=${tao} | Train w/ anno bg (--anno --bg)"
-  for id in "${train_w_anno_bg_ids[@]}"; do
-    run_one "$id" "$tao" "true" "true" "train"
-  done
 
   # ========== Process Validation Mock Data (注入到同一个输出目录) ==========
   if [[ "$PROCESS_VAL_MOCK" == "true" ]]; then
     h1 "TAO=${tao} | Processing VALIDATION MOCK data (injected into trainset)"
 
+    h2 "TAO=${tao} | Validation w/ anno (--anno)"
+    for id in "${val_w_anno_ids[@]}"; do
+      run_one "$id" "$tao" "true" "false" "validation"
+    done
+
+    h2 "TAO=${tao} | Validation w/o anno"
+    for id in "${val_wo_anno_ids[@]}"; do
+      run_one "$id" "$tao" "false" "false" "validation"
+    done
+
     h2 "TAO=${tao} | Validation w/ anno bg (--anno --bg)"
     for id in "${val_w_anno_bg_ids[@]}"; do
       run_one "$id" "$tao" "true" "true" "validation"
+    done
+
+    h2 "TAO=${tao} | Validation w/o anno bg (--bg)"
+    for id in "${val_wo_anno_bg_ids[@]}"; do
+      run_one "$id" "$tao" "false" "true" "validation"
     done
   else
     log "⏭️  Skipping validation mock processing (PROCESS_VAL_MOCK=false)"

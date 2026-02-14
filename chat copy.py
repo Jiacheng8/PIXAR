@@ -127,11 +127,21 @@ def main(args):
     )
     tokenizer.pad_token = tokenizer.unk_token
 
-    # Special tokens are already saved in the tokenizer, just look up their indices
+    # Add all special tokens in correct order
+    tokenizer.add_tokens("[CLS]")
+    tokenizer.add_tokens("[SEG]")
+    tokenizer.add_tokens("[OBJ]")
+    tokenizer.add_tokens("[END]")
+
+    # Record token indices
     args.cls_token_idx = tokenizer("[CLS]", add_special_tokens=False).input_ids[0]
     args.seg_token_idx = tokenizer("[SEG]", add_special_tokens=False).input_ids[0]
     args.obj_token_idx = tokenizer("[OBJ]", add_special_tokens=False).input_ids[0]
     args.end_token_idx = tokenizer("[END]", add_special_tokens=False).input_ids[0]
+
+    if args.use_mm_start_end:
+        tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN],
+                             special_tokens=True)
 
     print(f"✅ Tokenizer loaded. Vocabulary size: {len(tokenizer)}")
     print(f"   [CLS] = {args.cls_token_idx}")
@@ -318,7 +328,7 @@ def main(args):
             # Generate output
             print("🤖 Generating response...")
             with torch.no_grad():
-                output_ids, pred_masks, obj_preds, cls_info = model.evaluate(
+                output_ids, pred_masks, obj_preds = model.evaluate(
                     image_clip,
                     image,
                     input_ids,
@@ -328,11 +338,9 @@ def main(args):
                     tokenizer=tokenizer,
                 )
 
-            # Decode only the newly generated tokens (skip the input portion)
-            input_token_len = input_ids.shape[1]
-            new_tokens = output_ids[0][input_token_len:]
-            new_tokens = new_tokens[new_tokens != IMAGE_TOKEN_INDEX]
-            text_output = tokenizer.decode(new_tokens, skip_special_tokens=False)
+            # Decode text output
+            output_ids = output_ids[0][output_ids[0] != IMAGE_TOKEN_INDEX]
+            text_output = tokenizer.decode(output_ids, skip_special_tokens=False)
             text_output = text_output.replace("\n", " ").replace("  ", " ").strip()
 
             # Print result
@@ -344,12 +352,13 @@ def main(args):
 
             # Parse and highlight tokens
             print("\n🔍 Token Analysis:")
-            if cls_info is not None:
-                label = cls_info["label"]
-                icons = {"real": "✅ REAL", "fully synthetic": "🤖 FULLY SYNTHETIC", "tampered": "⚠️  TAMPERED"}
-                print(f"   Classification: {icons.get(label, label.upper())}")
-                for name, prob in cls_info["probabilities"].items():
-                    print(f"     - {name}: {prob:.4f}")
+            if "[CLS]" in text_output:
+                if "real" in text_output.lower() and "synthetic" not in text_output.lower():
+                    print("   Classification: ✅ REAL")
+                elif "full synthetic" in text_output.lower():
+                    print("   Classification: 🤖 FULL SYNTHETIC")
+                elif "tampered" in text_output.lower():
+                    print("   Classification: ⚠️  TAMPERED")
 
             if "[OBJ]" in text_output:
                 print("   Object Recognition: ✅ Present")

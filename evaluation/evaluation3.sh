@@ -6,6 +6,8 @@
 # 4) precision 选择 bf16；bf16 需要硬件支持（如 RTX4090和RTXA6000都可以）
 # 5) 结果会写入 ./logs/*.log（stdout+stderr 都重定向进去），跑完后直接看该 log 即可
 
+mkdir -p ./evaluation/logs
+
 deepspeed --include localhost:5 --master_port=24998 test.py \
   --version="/data/ironman/jiacheng/final_Omni_Data/ck/finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss0.5" \
   --dataset_dir='/data/ironman/jiacheng/final_Omni_Data/test/ours_0.05' \
@@ -14,5 +16,5 @@ deepspeed --include localhost:5 --master_port=24998 test.py \
   --precision='bf16' \
   --exp_name="evaluation-SIDA-7B_ours_0.05_full-dataset_ablation1_obj-loss0.5" \
   --test_only \
-  > ./logs/evaluation-SIDA-7B_ours_0.05_full-dataset_ablation1_obj-loss0.5.log 2>&1
+  > ./evaluation/logs/evaluation-SIDA-7B_ours_0.05_full-dataset_ablation1_obj-loss0.5.log 2>&1
   
