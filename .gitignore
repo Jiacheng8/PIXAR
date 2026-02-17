@@ -3,3 +3,9 @@ runs/
 runs_before/
 logs/
 *.csv
+vis_output/
+logs_prev/
+evaluation/finetune_SIDA-7B_ours-0.05_fuse/
+evaluation/finetune_SIDA-7B_ours-0.05_fuse_full/
+evaluation/finetune_SIDA-7B_ours-0.05_seg/
+evaluation/finetune_SIDA-7B_ours-text_only/

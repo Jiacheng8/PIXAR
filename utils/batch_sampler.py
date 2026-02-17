@@ -28,30 +28,39 @@ class BatchSampler(Sampler):
         # Store original indices
         self.original_indices = {cls: indices.copy() for cls, indices in self.indices_by_class.items()}
     
+    def set_epoch(self, epoch):
+        """Set epoch for deterministic shuffling across ranks."""
+        self.epoch = epoch
+
     def __iter__(self):
+        # Use a deterministic seed so all ranks generate the same batch list,
+        # then each rank takes its own slice. This prevents NCCL deadlocks
+        # caused by different ranks having different iterator lengths.
+        g = random.Random(self.epoch if hasattr(self, 'epoch') else 0)
+
         # Reset indices at the start of each iteration
         self.indices_by_class = {cls: indices.copy() for cls, indices in self.original_indices.items()}
-        
+
         # Create all possible batches for each class
         all_batches = []
-        for cls in self.indices_by_class:
+        for cls in sorted(self.indices_by_class.keys()):
             indices = list(self.indices_by_class[cls])
-            random.shuffle(indices)
-            
+            g.shuffle(indices)
+
             # Create complete batches for this class
             for i in range(0, len(indices) - self.batch_size + 1, self.batch_size):
                 batch = indices[i:i + self.batch_size]
                 all_batches.append(batch)
-        
+
         # Shuffle batches to ensure randomness in class distribution between batches
-        random.shuffle(all_batches)
-        
+        g.shuffle(all_batches)
+
         # Handle distributed training
         if self.world_size > 1:
             num_batches = len(all_batches)
             num_batches_per_rank = num_batches // self.world_size
             all_batches = all_batches[self.rank * num_batches_per_rank : (self.rank + 1) * num_batches_per_rank]
-        
+
         return iter(all_batches)
 
     def __len__(self):

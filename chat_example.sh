@@ -4,7 +4,7 @@
 # Usage: bash chat_example.sh
 export CUDA_VISIBLE_DEVICES=0
 python chat.py \
-    --version /data/ironman/jiacheng/final_Omni_Data/ck/finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss0.5\
+    --version /data/ironman/jiacheng/final_Omni_Data/ck/finetune_SIDA-7B_ours-0.05_seg\
     --vis_save_path ./vis_output \
     --precision bf16 \
     --image_size 1024 \

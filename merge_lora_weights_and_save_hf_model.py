@@ -41,13 +41,23 @@ def find_linear_layers(model, lora_target_modules):
     cls = torch.nn.Linear
     names = set()
     for name, module in model.named_modules():
-        if (isinstance(module, cls)
-            and all(x not in name for x in [
-                "visual_model", "vision_tower", "mm_projector",
-                "text_hidden_fcs", "cls_head", "sida_fc1", "attention_layer",
-                "obj_head",  # 训练时没对它打 LoRA，就排除
-            ])
-            and any(x in name for x in lora_target_modules)):
+        if (
+            isinstance(module, cls)
+            and all(
+                x not in name
+                for x in [
+                    "visual_model",
+                    "vision_tower",
+                    "mm_projector",
+                    "cls_head",
+                    "obj_head",
+                    "seg_proj",
+                    "text_proj",
+                    "gate_mlp",
+                ]
+            )
+            and any(x in name for x in lora_target_modules)
+        ):
             names.add(name)
     return sorted(list(names))
 

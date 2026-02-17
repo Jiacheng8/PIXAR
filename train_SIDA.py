@@ -86,6 +86,8 @@ def parse_args(args):
     parser.add_argument("--num_classes_per_sample", default=3, type=int)
     parser.add_argument("--exclude_val", action="store_true", default=False)
     parser.add_argument("--no_eval", action="store_true", default=False)
+    parser.add_argument("--num_saves", default=10, type=int,
+                        help="Number of evenly-spaced checkpoints (and validations) during training")
     parser.add_argument("--eval_only", action="store_true", default=False)
     parser.add_argument("--vision_pretrained", default="PATH_TO_SAM_ViT-H", type=str)
     parser.add_argument("--out_dim", default=256, type=int)
@@ -120,6 +122,23 @@ def parse_args(args):
                         help="Threshold for multi-label prediction on OBJ head")
     parser.add_argument("--log_obj_prefix", type=str, default="obj",
                         help="TensorBoard tag prefix for OBJ multi-label metrics")
+    
+    parser.add_argument(
+        "--seg_prompt_mode",
+        type=str,
+        default="fuse",
+        choices=["seg_only", "fuse", "text_only"],
+        help="SAM prompt embedding mode for segmentation ablation."
+    )
+
+    parser.add_argument(
+        "--mask_type",
+        type=str,
+        default="ours",
+        choices=["ours", "others"],
+        help="Mask type for loss computation: 'ours' uses gt_soft_mask, 'others' uses gt_mask."
+    )
+
 
     return parser.parse_args(args)
 def main(args):
@@ -180,6 +199,8 @@ def main(args):
         "vision_pretrained": args.vision_pretrained,
         "vision_tower": args.vision_tower,
         "use_mm_start_end": args.use_mm_start_end,
+        "seg_prompt_mode": args.seg_prompt_mode,
+        "mask_type": args.mask_type,
     }
     torch_dtype = torch.float32
     if args.precision == "bf16":
@@ -234,11 +255,11 @@ def main(args):
                                 "visual_model",
                                 "vision_tower",
                                 "mm_projector",
-                                "text_hidden_fcs",
                                 "cls_head",
-                                "sida_fc1",
-                                "attention_layer",
-                                "obj_head",          # <-- NEW
+                                "obj_head",
+                                "seg_proj",
+                                "text_proj",
+                                "gate_mlp",
                             ]
                         ]
                     )
@@ -271,7 +292,7 @@ def main(args):
         if any(
             [
                 x in n
-                for x in ["embed_tokens", "mask_decoder", "text_hidden_fcs","cls_head", "sida_fc1","attention_layer", "obj_head"]
+                for x in ["embed_tokens", "mask_decoder", "cls_head", "obj_head", "seg_proj", "text_proj", "gate_mlp"]
             ]
         ):
             p.requires_grad = True
@@ -284,7 +305,7 @@ def main(args):
             total_params += p.numel()
     print(f"Total trainable parameters: {total_params}")
 
-    world_size = torch.cuda.device_count()
+    world_size = dist.get_world_size()
     args.distributed = world_size > 1
     train_dataset = CustomDataset(
         base_image_dir=args.dataset_dir,  # Root directory containing image data
@@ -359,7 +380,7 @@ def main(args):
     batch_sampler = BatchSampler(
         dataset=train_dataset,
         batch_size=ds_config["train_micro_batch_size_per_gpu"],
-        world_size=torch.cuda.device_count(),
+        world_size=dist.get_world_size(),
         rank=args.local_rank
     )
 
@@ -376,7 +397,8 @@ def main(args):
             use_mm_start_end=args.use_mm_start_end,
             local_rank=args.local_rank,
             cls_token_idx=args.cls_token_idx,
-            obj_token_idx=args.obj_token_idx,   # <-- NEW
+            obj_token_idx=args.obj_token_idx,
+            seg_token_idx=args.seg_token_idx,
         ),
     )
     model_engine, optimizer, _, scheduler = deepspeed.initialize(
@@ -409,7 +431,7 @@ def main(args):
         val_sampler = BatchSampler(
             dataset=val_dataset,
             batch_size=args.val_batch_size,
-            world_size=torch.cuda.device_count(),
+            world_size=dist.get_world_size(),
             rank=args.local_rank
         )
         val_loader = torch.utils.data.DataLoader(
@@ -423,7 +445,9 @@ def main(args):
                  conv_type=args.conv_type,
                  use_mm_start_end=args.use_mm_start_end,
                  local_rank=args.local_rank,
-                 obj_token_idx=args.obj_token_idx,   # <-- NEW
+                 cls_token_idx=args.cls_token_idx,
+                 obj_token_idx=args.obj_token_idx,
+                 seg_token_idx=args.seg_token_idx,
              ),
         )
 
@@ -435,12 +459,17 @@ def main(args):
         acc, giou, ciou, _ = validate(val_loader, model_engine, 0, writer, args)  # Classification validation
         exit()
 
-    validation_epochs = [10, 20, 30 ,40 ,50, 60, 70,80, 90, 99]  # Perform validation at these epochs
+    num_saves = args.num_saves
+    step = max(1, args.epochs // num_saves)
+    validation_epochs = list(range(step, args.epochs, step))
+    if args.epochs not in validation_epochs:
+        validation_epochs.append(args.epochs)  # always include last epoch
     if args.local_rank == 0:
         print(f"\nTraining Configuration:")
         print(f"Total epochs: {args.epochs}")
         print(f"Validation will be performed after epochs: {validation_epochs}")
     for epoch in range(args.start_epoch, args.epochs):
+        batch_sampler.set_epoch(epoch)
         # train for one epoch
         train_iter = train(
             train_loader,
@@ -457,13 +486,16 @@ def main(args):
 
             if args.no_eval == False:
                 acc, giou, ciou, _ = validate(val_loader, model_engine, epoch, writer, args)
-                best_score = max(giou, best_score)
                 is_best_iou = giou > best_score
-                cur_ciou = ciou if is_best_iou else cur_ciou
                 is_best_acc = acc > best_acc
+                best_score = max(giou, best_score)
                 best_acc = max(acc, best_acc)
+                cur_ciou = ciou if is_best_iou else cur_ciou
                 cur_acc = acc if is_best_acc else cur_acc
                 is_best = is_best_iou or is_best_acc
+            else:
+                acc, giou, ciou = -1.0, -1.0, -1.0
+                is_best = False
 
             if args.local_rank == 0:
                 print(f"Current accuracy: {acc:.2f}%, Best accuracy: {best_acc:.2f}%")
@@ -483,6 +515,7 @@ def main(args):
                         shutil.rmtree(save_dir)
                 torch.distributed.barrier()
                 model_engine.save_checkpoint(save_dir)
+                torch.distributed.barrier()
         else:
             if args.local_rank == 0:
                 print(f"Epoch {epoch + 1} completed. Skipping validation.")
@@ -524,93 +557,96 @@ def train(
     )
     model.train()
     end = time.time()
-    for global_step in range(args.steps_per_epoch):
-        model.zero_grad()
-        for i in range(args.grad_accumulation_steps):
-            try:
-                input_dict = next(train_iter)
-            except:
-                train_iter = iter(train_loader)
-                input_dict = next(train_iter)
+    # total micro-batches per epoch = steps_per_epoch * grad_accumulation_steps
+    # DeepSpeed handles gradient accumulation internally: it accumulates gradients
+    # over grad_accumulation_steps micro-batches and then does all-reduce + optimizer step.
+    total_micro_steps = args.steps_per_epoch * args.grad_accumulation_steps
+    for global_step in range(total_micro_steps):
+        try:
+            input_dict = next(train_iter)
+        except:
+            train_iter = iter(train_loader)
+            input_dict = next(train_iter)
 
-            data_time.update(time.time() - end)
-            input_dict = dict_to_cuda(input_dict)
-            if args.precision == "fp16":
-                input_dict["images"] = input_dict["images"].half()
-                input_dict["images_clip"] = input_dict["images_clip"].half()
-            elif args.precision == "bf16":
-                input_dict["images"] = input_dict["images"].bfloat16()
-                input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
-            else:
-                input_dict["images"] = input_dict["images"].float()
-                input_dict["images_clip"] = input_dict["images_clip"].float()
-            output_dict = model(**input_dict)
-            loss = output_dict["loss"]
-            cls_loss = output_dict["cls_loss"]
-            mask_bce_loss = output_dict["mask_bce_loss"]
-            mask_dice_loss = output_dict["mask_dice_loss"]
-            mask_loss = output_dict["mask_loss"]
-            obj_loss = output_dict.get("obj_loss", torch.tensor(0.0, device=loss.device))  # 兼容无返回
-            text_loss = output_dict.get("text_loss", torch.tensor(0.0, device=loss.device))  # NEW: text loss
-            losses.update(loss.item(), input_dict["images"].size(0))
-            cls_losses.update(cls_loss.item(), input_dict["images"].size(0))
-            if input_dict['cls_labels'][0] == 2:
-                mask_bce_losses.update(mask_bce_loss.item(), input_dict["images"].size(0))
-                mask_dice_losses.update(mask_dice_loss.item(), input_dict["images"].size(0))
-                mask_losses.update(mask_loss.item(), input_dict["images"].size(0))
-            # OBJ：以是否真的有标签为准（tampered 且 metadata 完整时才有）
-            if "obj_labels" in input_dict and input_dict["obj_labels"].numel() > 0:
-                # 建议用 N_obj（行数）作为计数；若想按元素数，保留原写法也可
-                n_obj = input_dict["obj_labels"].shape[0]
-                obj_losses.update(obj_loss.item(), max(n_obj, 1))
-            # TEXT: 更新 text loss（当有 text description 时）
-            if text_loss.item() > 0:
-                text_losses.update(text_loss.item(), input_dict["images"].size(0))
+        data_time.update(time.time() - end)
+        input_dict = dict_to_cuda(input_dict)
+        if args.precision == "fp16":
+            input_dict["images"] = input_dict["images"].half()
+            input_dict["images_clip"] = input_dict["images_clip"].half()
+        elif args.precision == "bf16":
+            input_dict["images"] = input_dict["images"].bfloat16()
+            input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
+        else:
+            input_dict["images"] = input_dict["images"].float()
+            input_dict["images_clip"] = input_dict["images_clip"].float()
+        output_dict = model(**input_dict)
+        loss = output_dict["loss"]
+        cls_loss = output_dict["cls_loss"]
+        mask_bce_loss = output_dict["mask_bce_loss"]
+        mask_dice_loss = output_dict["mask_dice_loss"]
+        mask_loss = output_dict["mask_loss"]
+        obj_loss = output_dict.get("obj_loss", torch.tensor(0.0, device=loss.device))
+        text_loss = output_dict.get("text_loss", torch.tensor(0.0, device=loss.device))
+        losses.update(loss.item(), input_dict["images"].size(0))
+        cls_losses.update(cls_loss.item(), input_dict["images"].size(0))
+        if input_dict['cls_labels'][0] == 2:
+            mask_bce_losses.update(mask_bce_loss.item(), input_dict["images"].size(0))
+            mask_dice_losses.update(mask_dice_loss.item(), input_dict["images"].size(0))
+            mask_losses.update(mask_loss.item(), input_dict["images"].size(0))
+        if "obj_labels" in input_dict and input_dict["obj_labels"].numel() > 0:
+            n_obj = input_dict["obj_labels"].shape[0]
+            obj_losses.update(obj_loss.item(), max(n_obj, 1))
+        if text_loss.item() > 0:
+            text_losses.update(text_loss.item(), input_dict["images"].size(0))
 
-                
-            model.backward(loss)
-            model.step()
+        model.backward(loss)
+        model.step()
 
-        batch_time.update(time.time() - end)
-        end = time.time()
+        # Log at optimizer step boundaries (every grad_accumulation_steps micro-batches)
+        optimizer_step = global_step // args.grad_accumulation_steps
+        is_optimizer_step = (global_step + 1) % args.grad_accumulation_steps == 0
 
-        if global_step % args.print_freq == 0:
-            if args.distributed:
-                batch_time.all_reduce()
-                data_time.all_reduce()
-                losses.all_reduce()
-                cls_losses.all_reduce()
-                mask_bce_losses.all_reduce()
-                mask_dice_losses.all_reduce()
-                mask_losses.all_reduce()
-                obj_losses.all_reduce()
-                text_losses.all_reduce()  # NEW: text loss
+        if is_optimizer_step:
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-            if args.local_rank == 0:
-                progress.display(global_step + 1)
-                writer.add_scalar("train/loss", losses.avg, global_step)
-                writer.add_scalar("train/cls_loss", cls_losses.avg, global_step)
-                writer.add_scalar("train/mask_bce_loss", mask_bce_losses.avg, global_step)
-                writer.add_scalar("train/mask_dice_loss", mask_dice_losses.avg, global_step)
-                writer.add_scalar("train/mask_loss", mask_losses.avg, global_step)
-                writer.add_scalar("metrics/total_secs_per_batch", batch_time.avg, global_step)
-                writer.add_scalar("metrics/data_secs_per_batch", data_time.avg, global_step)
-                writer.add_scalar("train/obj_loss", obj_losses.avg, global_step)
-                writer.add_scalar("train/text_loss", text_losses.avg, global_step)  # NEW: text loss
-            batch_time.reset()
-            data_time.reset()
-            losses.reset()
-            cls_losses.reset()
-            mask_bce_losses.reset()
-            mask_dice_losses.reset()
-            mask_losses.reset()
-            obj_losses.reset()
-            text_losses.reset()  # NEW: text loss
+            if optimizer_step % args.print_freq == 0:
+                if args.distributed:
+                    batch_time.all_reduce()
+                    data_time.all_reduce()
+                    losses.all_reduce()
+                    cls_losses.all_reduce()
+                    mask_bce_losses.all_reduce()
+                    mask_dice_losses.all_reduce()
+                    mask_losses.all_reduce()
+                    obj_losses.all_reduce()
+                    text_losses.all_reduce()
 
-        if global_step != 0:
-            curr_lr = scheduler.get_last_lr()
-            if args.local_rank == 0:
-                writer.add_scalar("train/lr", curr_lr[0], global_step)
+                if args.local_rank == 0:
+                    progress.display(optimizer_step + 1)
+                    writer.add_scalar("train/loss", losses.avg, optimizer_step)
+                    writer.add_scalar("train/cls_loss", cls_losses.avg, optimizer_step)
+                    writer.add_scalar("train/mask_bce_loss", mask_bce_losses.avg, optimizer_step)
+                    writer.add_scalar("train/mask_dice_loss", mask_dice_losses.avg, optimizer_step)
+                    writer.add_scalar("train/mask_loss", mask_losses.avg, optimizer_step)
+                    writer.add_scalar("metrics/total_secs_per_batch", batch_time.avg, optimizer_step)
+                    writer.add_scalar("metrics/data_secs_per_batch", data_time.avg, optimizer_step)
+                    writer.add_scalar("train/obj_loss", obj_losses.avg, optimizer_step)
+                    writer.add_scalar("train/text_loss", text_losses.avg, optimizer_step)
+                batch_time.reset()
+                data_time.reset()
+                losses.reset()
+                cls_losses.reset()
+                mask_bce_losses.reset()
+                mask_dice_losses.reset()
+                mask_losses.reset()
+                obj_losses.reset()
+                text_losses.reset()
+
+            if optimizer_step != 0:
+                curr_lr = scheduler.get_last_lr()
+                if args.local_rank == 0:
+                    writer.add_scalar("train/lr", curr_lr[0], optimizer_step)
 
     return train_iter
 import random
@@ -690,22 +726,21 @@ def validate(val_loader, model_engine, epoch, writer, args, sample_ratio=None):
         correct += (preds == cls_labels).sum().item()
         total += cls_labels.size(0)
         
-        # === <OBJ> Multi-label metrics ===
+        # === <OBJ> Multi-label metrics (only for tampered samples) ===
         if ("obj_logits" in output_dict) and ("obj_labels" in input_dict):
-            gt = input_dict["obj_labels"]  # [N_obj, K] 或 [0, 0]
-            if gt.numel() > 0:
-                logits_obj = output_dict["obj_logits"]  # [N_obj, K]
+            tampered_mask = (cls_labels == 2)
+            if tampered_mask.any():
+                gt = input_dict["obj_labels"][tampered_mask]  # [N_tampered, K]
+                logits_obj = output_dict["obj_logits"][tampered_mask]  # [N_tampered, K]
                 probs = logits_obj.sigmoid()
-                pred = (probs >= args.obj_threshold).to(gt.dtype)  # 二值化
+                pred = (probs >= args.obj_threshold).to(gt.dtype)
 
-                # 初始化 per-class 累计器
                 if obj_tp_per_class is None:
                     K = gt.shape[1]
                     device = gt.device
                     obj_tp_per_class = torch.zeros(K, device=device, dtype=torch.float64)
                     obj_fp_per_class = torch.zeros(K, device=device, dtype=torch.float64)
                     obj_fn_per_class = torch.zeros(K, device=device, dtype=torch.float64)
-                # micro 累计（把所有类别看成一个大集合）
                 tp = (pred * gt).sum().double()
                 fp = (pred * (1 - gt)).sum().double()
                 fn = ((1 - pred) * gt).sum().double()
@@ -713,12 +748,10 @@ def validate(val_loader, model_engine, epoch, writer, args, sample_ratio=None):
                 obj_fp_total += fp.item()
                 obj_fn_total += fn.item()
 
-                # subset accuracy（整行完全一致）
                 exact_match = (pred == gt).all(dim=1).sum().item()
                 obj_exact_match_total += exact_match
                 obj_rows_total += gt.shape[0]
 
-                # per-class 累计（macro）
                 obj_tp_per_class += (pred * gt).sum(dim=0).double()
                 obj_fp_per_class += (pred * (1 - gt)).sum(dim=0).double()
                 obj_fn_per_class += ((1 - pred) * gt).sum(dim=0).double()

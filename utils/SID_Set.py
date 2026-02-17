@@ -19,7 +19,7 @@ from .utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
                     DEFAULT_IMAGE_TOKEN)
 
 def collate_fn(
-    batch, tokenizer=None, conv_type="llava_v1", use_mm_start_end=True, local_rank=-1, cls_token_idx=None, obj_token_idx=None 
+    batch, tokenizer=None, conv_type="llava_v1", use_mm_start_end=True, local_rank=-1, cls_token_idx=None, obj_token_idx=None, seg_token_idx=None,
 ):
     image_path_list = []
     images_list = []
@@ -70,13 +70,11 @@ def collate_fn(
         offset_list.append(cnt)
         inferences.append(inference)
         has_text_description.append(has_text)
-        # >>> 必加：把标签装进批量列表（仅当存在时）
-        if obj_label_idx is not None:
-            # 现在传进来的是 multi-hot 向量或 Tensor
-            if torch.is_tensor(obj_label_idx):
-                obj_labels_list.append(obj_label_idx.to(torch.float32))
-            else:
-                obj_labels_list.append(torch.tensor(obj_label_idx, dtype=torch.float32))
+        # All samples now have obj_label_vec (zeros for non-tampered)
+        if torch.is_tensor(obj_label_idx):
+            obj_labels_list.append(obj_label_idx.to(torch.float32))
+        else:
+            obj_labels_list.append(torch.tensor(obj_label_idx, dtype=torch.float32))
 
     # Handle image tokens
     if use_mm_start_end:
@@ -90,15 +88,16 @@ def collate_fn(
         tokenizer_image_token(prompt, tokenizer, return_tensors="pt")
         for prompt in conversation_list
     ]
-    # === Sanity check: [OBJ] token 数量应与 obj_labels 数量一致 ===
+    original_lengths = [len(ids) for ids in original_input_ids]
+
+    # === Sanity check: [OBJ] token count should match obj_labels count ===
     if obj_token_idx is not None:
         obj_token_count = sum((ids == obj_token_idx).sum().item() for ids in original_input_ids)
         if obj_token_count != len(obj_labels_list):
             raise RuntimeError(
                 f"[OBJ] mismatch: tokens={obj_token_count}, labels={len(obj_labels_list)}. "
-                "Only append [OBJ] when obj_label_idx exists (or use ignore_index=-100 scheme consistently)."
+                "Every sample must have exactly one [OBJ] token."
             )
-        original_lengths = [len(ids) for ids in original_input_ids]
 
     # Pad sequences
     input_ids = torch.nn.utils.rnn.pad_sequence(
@@ -162,6 +161,14 @@ def collate_fn(
         
         target[cur_len:] = IGNORE_INDEX
 
+    # Force IGNORE_INDEX on structure tokens — never supervised by LM loss
+    if cls_token_idx is not None:
+        targets[input_ids == cls_token_idx] = IGNORE_INDEX
+    if obj_token_idx is not None:
+        targets[input_ids == obj_token_idx] = IGNORE_INDEX
+    if seg_token_idx is not None:
+        targets[input_ids == seg_token_idx] = IGNORE_INDEX
+
     # Handle truncation for non-inference cases
     if not inferences[0]:
         truncate_len = tokenizer.model_max_length - 255
@@ -188,13 +195,8 @@ def collate_fn(
         "sampled_classes_list": sampled_classes_list,
         "inference": inferences[0],
         "conversation_list": conversation_list,
-        # === NEW ===
-        # multi-hot: [N_obj, K] 的 float；若没有 OBJ，就返回空张量 [0, K] 或 [0, 0]
-        "obj_labels": (
-            torch.stack(obj_labels_list, dim=0)
-            if len(obj_labels_list) > 0
-            else torch.empty((0, 0), dtype=torch.float32)
-        ),
+        # multi-hot: [B, K] — all samples have obj_labels (zeros for non-tampered)
+        "obj_labels": torch.stack(obj_labels_list, dim=0),
     }
 
 class CustomDataset(torch.utils.data.Dataset):
@@ -303,25 +305,16 @@ class CustomDataset(torch.utils.data.Dataset):
         x = F.pad(x, (0, padw, 0, padh))
         return x
     
-    def _generate_response(self, cls_label, image_name, text_description=None, has_obj_label=False):
-        """Generate appropriate response based on image type and available description"""
+    def _generate_response(self, cls_label, text_description=None):
+        """Generate response with unified [CLS] [OBJ] [SEG] prefix for ALL samples."""
         if cls_label == 0:
-            response = "[CLS] The image is real"
+            response = "[CLS] [OBJ] [SEG]"
         elif cls_label == 1:
-            response = "[CLS] The image is full synthetic"
+            response = "[CLS] [OBJ] [SEG]"
         else:  # cls_label == 2 (tampered)
-            # Put [OBJ] before [SEG] - more logical order
-            if has_obj_label:
-                response = "[CLS] The image is tampered [OBJ] [SEG]"
-            else:
-                response = "[CLS] The image is tampered [SEG]"
-
-        # Add text description if available (only for tampered images typically)
-        if text_description:
-            response = response + f" {text_description}"
-
-        # Add [END] token to mark sequence completion
-        response = response + " [END]"
+            response = "[CLS] [OBJ] [SEG] The image is tampered."
+            if text_description:
+                response += f" {text_description}"
 
         return response
     
@@ -345,8 +338,8 @@ class CustomDataset(torch.utils.data.Dataset):
         mask = torch.zeros((1, resize[0], resize[1]))
         soft_mask = torch.zeros((1, resize[0], resize[1]))
 
-        obj_label_vec = None  # 多标签向量，默认None，仅tampered时赋值
-        text_description = None  # text description，默认None
+        obj_label_vec = torch.zeros(self.num_obj_classes, dtype=torch.float32)  # all-zeros for non-tampered
+        text_description = None
 
         # Load mask for tampered
         if cls_labels == 2:
@@ -385,27 +378,23 @@ class CustomDataset(torch.utils.data.Dataset):
                 # 读取 text description
                 text_description = meta.get("text", None)
 
-                # 构造 multi-hot 向量
-                vec = torch.zeros(self.num_obj_classes, dtype=torch.float32)
+                # Build multi-hot vector
                 for c in cls_list:
                     if isinstance(c, str):
                         if c in self.class_to_idx:
-                            vec[self.class_to_idx[c]] = 1.0
+                            obj_label_vec[self.class_to_idx[c]] = 1.0
                         else:
                             print(f"[WARN] Unknown class '{c}' in metadata for {base_name}")
                     elif isinstance(c, int):
                         if 0 <= c < self.num_obj_classes:
-                            vec[c] = 1.0
+                            obj_label_vec[c] = 1.0
                         else:
                             print(f"[WARN] Class index {c} out of range for {base_name}")
                     else:
                         print(f"[WARN] Unsupported class entry {c} for {base_name}")
-                # 若列表为空，则保持 None；否则赋值
-                obj_label_vec = vec if vec.sum() > 0 else None
 
             except Exception as e:
                 print(f"[WARN] fail to read metadata for {base_name}: {e}")
-                obj_label_vec = None
                 text_description = None
 
 
@@ -414,15 +403,14 @@ class CustomDataset(torch.utils.data.Dataset):
         conv.append_message(conv.roles[0],
             f"{DEFAULT_IMAGE_TOKEN}\nCan you identify whether this image is real, fully synthetic, or tampered? If it is tampered, please (1) classify which object was modified and (2) output a mask for the modified regions.")
 
-        # Generate response with proper token order: [CLS] ... [OBJ] [SEG] description
-        has_obj = (cls_labels == 2 and obj_label_vec is not None)
-        response = self._generate_response(cls_labels, image_name, text_description, has_obj_label=has_obj)
+        # Generate response with unified [CLS] [OBJ] [SEG] prefix
+        response = self._generate_response(cls_labels, text_description)
 
         conv.append_message(conv.roles[1], response)
         conversation = conv.get_prompt()
 
-        # Set has_text flag: True if text description exists and is not empty
-        has_text = (text_description is not None and text_description.strip() != "")
+        # Only tampered samples have text after [SEG]
+        has_text = (cls_labels == 2)
 
         labels = torch.ones(mask.shape[1], mask.shape[2]) * self.ignore_label
 

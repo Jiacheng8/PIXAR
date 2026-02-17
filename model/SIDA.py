@@ -74,51 +74,43 @@ class SidaMetaModel:
             for param in self.visual_model.mask_decoder.parameters():
                 param.requires_grad = True
 
-        # Projection layer
         in_dim = config.hidden_size
         out_dim = config.out_dim
-        text_fc = [
+
+        # Classification head (3-way: real / fully synthetic / tampered)
+        self.cls_head = nn.ModuleList([nn.Sequential(
+            nn.Linear(in_dim, in_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(0.0),
+            nn.Linear(in_dim // 2, 3),
+        )])
+
+        # Object recognition head (multi-label)
+        self.obj_head = nn.Sequential(
+            nn.Linear(in_dim, in_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(0.0),
+            nn.Linear(in_dim // 2, config.num_obj_classes),
+        )
+
+        # Gated SEG + description fusion for segmentation
+        self.seg_proj = nn.Sequential(
             nn.Linear(in_dim, in_dim),
             nn.ReLU(inplace=True),
             nn.Linear(in_dim, out_dim),
-            nn.Dropout(0.0),
-        ]
-        self.text_hidden_fcs = nn.ModuleList([nn.Sequential(*text_fc)])
-        cls_head = (
-            nn.Linear(in_dim, in_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(0.0),
-            nn.Linear(in_dim // 2, 3)
         )
-        self.cls_head = nn.ModuleList([nn.Sequential(*cls_head)])
-        print(f"Created cls_head: {cls_head}")
-        obj_head = (
-            nn.Linear(in_dim, in_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(0.0),
-            nn.Linear(in_dim // 2, config.num_obj_classes)
+        self.text_proj = nn.Sequential(
+            nn.Linear(in_dim, in_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_dim, out_dim),
         )
-        self.obj_head = nn.Sequential(*obj_head)
-        print(f"Created obj_head: {self.obj_head}")
-        self.sida_fc1 = nn.Linear(3, out_dim)
-        print(f"Created sida_fc1: {self.sida_fc1}")
-        self.attention_layer = nn.MultiheadAttention(embed_dim=out_dim, num_heads=8, batch_first=True)
-        print(f"Created attention_layer: {self.attention_layer}")
-        self.text_hidden_fcs.train()
-        self.cls_head.train()
-        self.sida_fc1.train()
-        self.attention_layer.train()
-        self.obj_head.train()
-        for p in self.obj_head.parameters():
-            p.requires_grad = True
-        for param in self.text_hidden_fcs.parameters():
-            param.requires_grad = True
-        for param in self.cls_head.parameters():
-            param.requires_grad = True
-        for param in self.sida_fc1.parameters():
-            param.requires_grad = True
-        for param in self.attention_layer.parameters():
-            param.requires_grad = True
+        self.gate_mlp = nn.Linear(2 * out_dim, 1)
+
+        # Set all trainable
+        for module in [self.cls_head, self.obj_head, self.seg_proj, self.text_proj, self.gate_mlp]:
+            module.train()
+            for p in module.parameters():
+                p.requires_grad = True
 
 class SidaModel(SidaMetaModel, LlavaLlamaModel):
     def __init__(self, config, **kwargs):
@@ -169,6 +161,9 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
         self.model = SidaModel(config, **kwargs)
         self.model.initialize_sida_modules(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.seg_prompt_mode = kwargs.pop("seg_prompt_mode", "fuse")
+        self.mask_type = kwargs.pop("mask_type", "ours")
+
         self.post_init()
     def get_visual_embs(self, pixel_values: torch.FloatTensor):
         with torch.no_grad():
@@ -208,36 +203,12 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
     ):
         if images.size(0) != images_clip.size(0):
             raise ValueError(f"Batch size mismatch: images {images.size(0)} != images_clip {images_clip.size(0)}")
+
         image_embeddings = self.get_visual_embs(images)
-        B, C, H, W = image_embeddings.shape
-        
+        B = image_embeddings.shape[0]
         assert B == len(offset) - 1
-        cls_token_mask = (input_ids[:,1:] == self.cls_token_idx)
-        cls_token_mask = torch.cat([
-            cls_token_mask,
-            torch.zeros((cls_token_mask.shape[0], 1)).bool().cuda()
-            ], 
-            dim=1)
-        cls_token_mask =  torch.cat(
-            [
-            torch.zeros((cls_token_mask.shape[0], 255)).bool().cuda(),  # Padding with 255 zeros at the beginning
-            cls_token_mask,
-            ],
-                dim=1,
-            )
-        seg_token_mask = (input_ids[:, 1:] == self.seg_token_idx)
 
-        seg_token_mask = torch.cat([
-            torch.zeros((seg_token_mask.shape[0], 255), dtype=torch.bool, device=input_ids.device),
-            seg_token_mask,
-            torch.zeros((seg_token_mask.shape[0], 1),   dtype=torch.bool, device=input_ids.device)], dim=1)
-
-        obj_token_mask = (input_ids[:, 1:] == self.obj_token_idx)
-        obj_token_mask = torch.cat([
-            torch.zeros((obj_token_mask.shape[0], 255), dtype=torch.bool, device=input_ids.device),
-            obj_token_mask,
-            torch.zeros((obj_token_mask.shape[0], 1),   dtype=torch.bool, device=input_ids.device)
-        ], dim=1)
+        # ===== LLM Forward Pass =====
         if inference:
             n_batch = 1
             length = input_ids.shape[0]
@@ -254,12 +225,9 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
                 )
                 output_hidden_states.append(output_i.hidden_states)
                 torch.cuda.empty_cache()
-            output_hidden_states_list = []
             output_hidden_states_level = torch.cat(output_hidden_states, dim=0)
-            output_hidden_states_list.append(output_hidden_states_level)
-            output_hidden_states = output_hidden_states_list
-            output = None
-            text_loss = torch.tensor(0.0, device=images.device)  # No text loss in inference mode
+            output_hidden_states = [output_hidden_states_level]
+            text_loss = torch.tensor(0.0, device=images.device)
         else:
             images_clip_list = []
             for i in range(len(offset) - 1):
@@ -271,220 +239,217 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
                     .contiguous()
                 )
                 images_clip_list.append(images_clip_i)
-            images_clip = torch.cat(images_clip_list, dim=0) #[2,3,224,224]
+            images_clip = torch.cat(images_clip_list, dim=0)
             output = super().forward(
                 images=images_clip,
                 attention_mask=attention_masks,
                 input_ids=input_ids,
-                labels = labels,
+                labels=labels,
                 output_hidden_states=True,
             )
             output_hidden_states = output.hidden_states
 
-            # Extract text loss (language modeling loss) from LLM output
-            # Only compute text_loss for tampered images (cls_labels == 2)
-            # Real and full_synthetic images don't need text generation supervision
-            if (cls_labels == 2).any():  # If there are any tampered images in the batch
-                if hasattr(output, 'loss') and output.loss is not None:
-                    text_loss = output.loss if not torch.isnan(output.loss) else torch.tensor(0.0, device=images.device)
-                else:
-                    text_loss = torch.tensor(0.0, device=images.device)
+            # LM text loss — for ALL samples (all have text after [SEG])
+            if hasattr(output, 'loss') and output.loss is not None and not torch.isnan(output.loss):
+                text_loss = output.loss
             else:
-                # No tampered images in batch - skip text loss
                 text_loss = torch.tensor(0.0, device=images.device)
-            
-        # Geting cls information
-        assert len(self.model.cls_head) == 1
-        last_hidden_state_cls = self.model.cls_head[0](output_hidden_states[-1]) 
 
-        cls_result = last_hidden_state_cls[cls_token_mask]
+        # ===== Clean offset-based token position extraction =====
+        hs = output_hidden_states[-1]  # [B, T_expanded, H_dim]
+        T_input = input_ids.shape[1]
+        T_hidden = hs.shape[1]
+        image_offset = T_hidden - T_input  # num_image_tokens - 1
+        H_dim = hs.shape[-1]
 
-        logits = cls_result
-        loss_fct = nn.CrossEntropyLoss()
-        cls_loss = loss_fct(logits, cls_labels)
-        
-        # Geting obj information (multi-label: sigmoid + BCEWithLogits)
-        last_h = output_hidden_states[-1]  # [B, T, H]
-        obj_loss = torch.zeros((), device=last_h.device)
-        # 先在外层准备一个空的 obj_logits（即便没有 [OBJ] 也能返回给 validate）
-        obj_logits = torch.empty(
-            (0, self.model.config.num_obj_classes),
-            device=last_h.device,
-            dtype=last_h.dtype,
-        )
-        if obj_token_mask.any():
-            # 1) 取出 OBJ 位置的 logits
-            obj_logits_all = self.model.obj_head(last_h)     # [B, T, K]
-            obj_logits = obj_logits_all[obj_token_mask]      # [N_obj, K]
+        # Find structure token positions in input_ids
+        cls_pos = (input_ids == self.cls_token_idx)
+        obj_pos = (input_ids == self.obj_token_idx)
+        seg_pos = (input_ids == self.seg_token_idx)
 
-            # 2) 与标签对齐（期望 obj_labels: [N_obj, K], float in [0,1]）
-            n = min(obj_logits.size(0), obj_labels.size(0)) if obj_labels is not None else 0
-            if obj_logits.size(0) != (0 if obj_labels is None else obj_labels.size(0)) and self.training:
-                print(f"[WARN] OBJ mismatch: logits={obj_logits.size(0)}, labels={0 if obj_labels is None else obj_labels.size(0)}")
+        assert cls_pos.sum(1).eq(1).all(), f"Each sample must have exactly one [CLS], got {cls_pos.sum(1)}"
+        assert obj_pos.sum(1).eq(1).all(), f"Each sample must have exactly one [OBJ], got {obj_pos.sum(1)}"
+        assert seg_pos.sum(1).eq(1).all(), f"Each sample must have exactly one [SEG], got {seg_pos.sum(1)}"
 
-            # ====== 计算 obj_loss（支持固定或自适应 pos_weight）======
+        # Extract hidden vectors at token positions (shifted by image_offset)
+        cls_vec = torch.zeros(B, H_dim, device=hs.device, dtype=hs.dtype)
+        obj_vec = torch.zeros(B, H_dim, device=hs.device, dtype=hs.dtype)
+        seg_vec = torch.zeros(B, H_dim, device=hs.device, dtype=hs.dtype)
+        seg_h_indices = []
+
+        for b in range(B):
+            c = cls_pos[b].nonzero()[0].item()
+            o = obj_pos[b].nonzero()[0].item()
+            s = seg_pos[b].nonzero()[0].item()
+            cls_vec[b] = hs[b, c + image_offset]
+            obj_vec[b] = hs[b, o + image_offset]
+            seg_vec[b] = hs[b, s + image_offset]
+            seg_h_indices.append(s + image_offset)
+
+        # ===== Classification Head =====
+        cls_logits = self.model.cls_head[0](cls_vec)  # [B, 3]
+        cls_loss = nn.CrossEntropyLoss()(cls_logits, cls_labels)
+
+        # ===== Object Head (loss only for tampered) =====
+        obj_logits = self.model.obj_head(obj_vec)  # [B, K]
+        # Keep obj_head in the computation graph even when no real obj_loss is computed,
+        # to prevent DeepSpeed ZeRO all-reduce deadlock across ranks.
+        obj_loss = (obj_logits * 0.0).sum()
+        tampered_mask = (cls_labels == 2)
+        if tampered_mask.any() and obj_labels is not None and obj_labels.numel() > 0:
+            tampered_obj_logits = obj_logits[tampered_mask]
+            tampered_obj_labels = obj_labels[tampered_mask]
+            n = min(tampered_obj_logits.size(0), tampered_obj_labels.size(0))
             if n > 0:
-                # (a) 如果命令行给了固定的 pos_weight（标量），对所有类别统一使用
                 if self.fixed_obj_pos_weight is not None:
                     pos_w = torch.full(
-                        (obj_logits.size(1),),  # [K]
+                        (tampered_obj_logits.size(1),),
                         float(self.fixed_obj_pos_weight),
-                        device=obj_logits.device,
-                        dtype=obj_logits.dtype
+                        device=tampered_obj_logits.device,
+                        dtype=tampered_obj_logits.dtype,
                     )
                 else:
-                    # (b) 自动按当前 batch 的正例率估计 per-class pos_weight
-                    #     p_k = positive_rate_k = mean over N_obj for each class
                     with torch.no_grad():
-                        p = obj_labels[:n].float().mean(dim=0)              # [K]
+                        p = tampered_obj_labels[:n].float().mean(dim=0)
                         pos_w = ((1.0 - p) / (p.clamp_min(1e-6))).clamp(1.0, self.obj_pos_weight_max)
-
-                obj_loss = F.binary_cross_entropy_with_logits(
-                    obj_logits[:n], obj_labels[:n].float(),
-                    reduction="mean",
-                    pos_weight=pos_w
+                obj_loss = obj_loss + F.binary_cross_entropy_with_logits(
+                    tampered_obj_logits[:n], tampered_obj_labels[:n].float(),
+                    reduction="mean", pos_weight=pos_w,
                 )
-        
-        # Geting segmentation
+
+        # ===== Segmentation with gated SEG + description fusion (tampered only) =====
         mask_bce_loss = torch.tensor(0.0, device=cls_loss.device)
         mask_dice_loss = torch.tensor(0.0, device=cls_loss.device)
-        mask_loss     = torch.tensor(0.0, device=cls_loss.device)
-
+        mask_loss = torch.tensor(0.0, device=cls_loss.device)
+        pred_masks = []
         num_masks = 0
-        if (cls_labels == 2).any():
-            hidden_states = []
-            hidden_states.append(self.model.text_hidden_fcs[0](output_hidden_states[-1]))
-            last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
-            pred_embeddings = last_hidden_state[seg_token_mask]
-            seg_token_counts = seg_token_mask.int().sum(-1)  # [bs, ]
-            seg_token_offset = seg_token_counts.cumsum(-1)
-            seg_token_offset = torch.cat(
-            [torch.zeros(1).long().cuda(), seg_token_offset], dim=0
-            )
-            try:
-                seg_token_offset = seg_token_offset[offset]
-            except Exception as e:
-                print(f"Error when applying offset to seg_token_offset: {e}")
-            pred_embeddings_ = []
-            for i in range(len(seg_token_offset) - 1):
-                start_i, end_i = seg_token_offset[i], seg_token_offset[i + 1]
-                pred_embeddings_.append(pred_embeddings[start_i:end_i])
-            pred_embeddings = pred_embeddings_
-            #Attention
-            cls_projected = self.model.sida_fc1(cls_result)
-            enhanced_pred_embeddings = []
-            for i in range(len(pred_embeddings)):
-                seg_embeddings = pred_embeddings[i]
-                # Prepare Query, Key, and Value
-                query = cls_projected[i].unsqueeze(0)
-                key = seg_embeddings
-                value = seg_embeddings
-                try:
-                    attn_output, _ = self.model.attention_layer(query=query, key=key, value=value)
-                except Exception as e:
-                    print(f"Error in attention layer: {e}")
-                enhanced_embeddings = seg_embeddings + attn_output
-                enhanced_pred_embeddings.append(enhanced_embeddings)
-            multimask_output = False
 
-            pred_masks = []
-            for i in range(len(enhanced_pred_embeddings)):
-                (
-                    
-                    sparse_embeddings,
-                    dense_embeddings,
-                ) = self.model.visual_model.prompt_encoder(
-                    points=None,
-                    boxes=None,
-                    masks=None,
-                    text_embeds=enhanced_pred_embeddings[i].unsqueeze(1),
+        if tampered_mask.any():
+            tampered_indices = tampered_mask.nonzero(as_tuple=True)[0]
+            for b in tampered_indices:
+                b = b.item()
+                # SEG embedding
+                seg_emb = self.model.seg_proj(seg_vec[b])  # [out_dim]
+                
+                # Description span: from seg_h_idx+1 to end of real tokens
+                seg_h_idx = seg_h_indices[b]
+                seq_len = int(attention_masks[b].sum().item())
+                end_h_idx = seq_len + image_offset
+                desc_h = hs[b, seg_h_idx + 1:end_h_idx, :]
+
+                if desc_h.shape[0] > 0:
+                    text_vec_b = desc_h.mean(dim=0)
+                else:
+                    text_vec_b = torch.zeros(H_dim, device=hs.device, dtype=hs.dtype)
+                text_emb = self.model.text_proj(text_vec_b)  # [out_dim]
+
+                # Gated fusion
+                mode = getattr(self, "seg_prompt_mode", "fuse")
+
+                # 只有需要 text 的模式才算 text（避免无谓计算）
+                text_emb = None
+                if mode in ["fuse", "text_only"]:
+                    seg_h_idx = seg_h_indices[b]
+                    seq_len = int(attention_masks[b].sum().item())
+                    end_h_idx = seq_len + image_offset
+                    desc_h = hs[b, seg_h_idx + 1:end_h_idx, :]
+
+                    if desc_h.shape[0] > 0:
+                        text_vec_b = desc_h.mean(dim=0)
+                    else:
+                        text_vec_b = torch.zeros(H_dim, device=hs.device, dtype=hs.dtype)
+
+                    text_emb = self.model.text_proj(text_vec_b)  # [out_dim]
+
+                # === Ablation switch ===
+                if mode == "seg_only":
+                    fused = seg_emb
+                elif mode == "text_only":
+                    fused = text_emb
+                else:
+                    # fuse
+                    gate = torch.sigmoid(self.model.gate_mlp(torch.cat([seg_emb, text_emb], dim=-1)))
+                    fused = gate * seg_emb + (1 - gate) * text_emb
+
+
+                # Feed to SAM
+                text_embeds = fused.unsqueeze(0).unsqueeze(1)  # [1, 1, out_dim]
+                sparse_embeddings, dense_embeddings = self.model.visual_model.prompt_encoder(
+                    points=None, boxes=None, masks=None, text_embeds=text_embeds,
                 )
-
-
-                sparse_embeddings = sparse_embeddings.to(enhanced_pred_embeddings[i].dtype)
-                low_res_masks, iou_predictions = self.model.visual_model.mask_decoder(
-                    image_embeddings=image_embeddings[i].unsqueeze(0),
+                sparse_embeddings = sparse_embeddings.to(fused.dtype)
+                low_res_masks, _ = self.model.visual_model.mask_decoder(
+                    image_embeddings=image_embeddings[b].unsqueeze(0),
                     image_pe=self.model.visual_model.prompt_encoder.get_dense_pe(),
                     sparse_prompt_embeddings=sparse_embeddings,
                     dense_prompt_embeddings=dense_embeddings,
-                    multimask_output=multimask_output,
+                    multimask_output=False,
                 )
-
-
                 pred_mask = self.model.visual_model.postprocess_masks(
                     low_res_masks,
-                    input_size=resize_list[i],
-                    original_size=label_list[i].shape,
+                    input_size=resize_list[b],
+                    original_size=label_list[b].shape,
                 )
-
                 pred_masks.append(pred_mask[:, 0])
 
-            model_output = output
-            gt_masks = masks_list
-            gt_soft_masks = soft_masks_list
-                
-            for batch_idx in range(len(pred_masks)):
-                gt_mask = gt_masks[batch_idx]
-                gt_soft_mask = soft_masks_list[batch_idx]
-                pred_mask = pred_masks[batch_idx]
-                
-                assert (
-                    gt_mask.shape[0] == pred_mask.shape[0]
-                ), "gt_mask.shape: {}, pred_mask.shape: {}".format(
-                    gt_mask.shape, pred_mask.shape
-                )
+                # Compute mask loss
+                gt_mask = masks_list[b]
+                gt_soft_mask = soft_masks_list[b]
+                target_mask = gt_soft_mask if self.mask_type == "ours" else gt_mask
+                assert target_mask.shape[0] == pred_mask[:, 0].shape[0], \
+                    f"target_mask.shape: {target_mask.shape}, pred_mask.shape: {pred_mask[:, 0].shape}"
 
                 mask_bce_loss += (
-                    sigmoid_ce_loss(pred_mask, gt_soft_mask, num_masks=gt_soft_mask.shape[0])
-                    * gt_soft_mask.shape[0]
+                    sigmoid_ce_loss(pred_mask[:, 0], target_mask, num_masks=target_mask.shape[0])
+                    * target_mask.shape[0]
                 )
-                # 用软标签计算 Dice Loss
                 mask_dice_loss += (
-                    dice_loss(pred_mask, gt_soft_mask, num_masks=gt_soft_mask.shape[0])
-                    * gt_soft_mask.shape[0]
+                    dice_loss(pred_mask[:, 0], target_mask, num_masks=target_mask.shape[0])
+                    * target_mask.shape[0]
                 )
+                num_masks += target_mask.shape[0]
 
-                num_masks += gt_soft_mask.shape[0]
-                
             mask_bce_loss = self.bce_loss_weight * mask_bce_loss / (num_masks + 1e-8)
             mask_dice_loss = self.dice_loss_weight * mask_dice_loss / (num_masks + 1e-8)
             mask_loss = mask_bce_loss + mask_dice_loss
 
-        else:
-            mask_bce_loss = torch.tensor(0.0, device=cls_loss.device)
-            mask_dice_loss = torch.tensor(0.0, device=cls_loss.device)
-            mask_loss = torch.tensor(0.0, device=cls_loss.device)
-
-        if not inference and seg_token_mask.sum() == 0:  
-            dummy = torch.zeros([], device=cls_loss.device) 
+        # Dummy loss to keep unused trainable params in the graph when no tampered samples.
+        # Without this, DeepSpeed ZeRO all-reduce deadlocks because some ranks have
+        # gradients for these params while others don't.
+        # Note: obj_head is always in the graph via obj_loss = (obj_logits * 0.0).sum()
+        if not inference and not tampered_mask.any():
+            dummy = torch.zeros([], device=cls_loss.device)
             for p in itertools.chain(
                 self.model.visual_model.mask_decoder.parameters(),
-                self.model.text_hidden_fcs.parameters(),
-                self.model.sida_fc1.parameters(), 
-                self.model.attention_layer.parameters()):
-                dummy = dummy + p.sum() * 0.0      
+                self.model.seg_proj.parameters(),
+                self.model.text_proj.parameters(),
+                self.model.gate_mlp.parameters(),
+            ):
+                dummy = dummy + p.sum() * 0.0
             mask_loss = mask_loss + dummy
 
-        loss = self.mask_loss_weight * mask_loss + self.cls_loss_weight * cls_loss + self.obj_loss_weight * obj_loss + self.text_loss_weight * text_loss
+        # ===== Total Loss =====
+        loss = (
+            self.mask_loss_weight * mask_loss
+            + self.cls_loss_weight * cls_loss
+            + self.obj_loss_weight * obj_loss
+            + self.text_loss_weight * text_loss
+        )
 
-        # === 统一的 inference 返回口 ===        
+        # ===== Return =====
         if inference:
             out = {
-                "logits": logits,
-                "obj_logits": obj_logits,  # 总是带上，可能是 [0, K]
+                "logits": cls_logits,
+                "obj_logits": obj_logits,
             }
-            # 如果做了分割（常见于 tampered），则一并返回分割相关
-            if (cls_labels == 2).any():
+            if tampered_mask.any():
                 out.update({
-                    "pred_masks": pred_masks if 'pred_masks' in locals() else [],
+                    "pred_masks": pred_masks,
                     "gt_masks": masks_list,
                     "gt_soft_masks": soft_masks_list,
                 })
-            # 也可以顺手给概率/二值（validate 自己会 sigmoid+阈值，这两项可留可删）
-            # out["obj_probs"] = obj_logits.sigmoid() if obj_logits.numel() > 0 else obj_logits
             return out
 
-        # 训练阶段常规返回
         return {
             "loss": loss,
             "mask_bce_loss": mask_bce_loss,
@@ -492,10 +457,10 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
             "mask_loss": mask_loss,
             "cls_loss": cls_loss,
             "obj_loss": obj_loss,
-            "text_loss": text_loss,  # NEW: text loss
-            "logits": logits,
-            "cls_hidden_state": cls_result,
+            "text_loss": text_loss,
+            "logits": cls_logits,
         }
+        
     def evaluate(
         self,
         images_clip,
@@ -505,155 +470,133 @@ class SIDAForCausalLM(LlavaLlamaForCausalLM):
         original_size_list,
         max_new_tokens=64,
         tokenizer=None,
+        cls_label=None,
     ):
+        """
+        Two-stage inference with early exit for non-tampered samples:
+        Stage 1: Cheap forward pass on input_ids to classify (no generation).
+        Stage 2 (tampered only): Generate text + segment.
+        """
         with torch.no_grad():
-            # Step 1: Generate text (output_ids only)
-            output_ids = self.generate(
-                images=images_clip,
-                input_ids=input_ids,
-                max_new_tokens=max_new_tokens,
-                num_beams=1,
-            )
-
-            # Step 2: Forward pass to get hidden states
-            # Mirror the training inference path (model_forward with inference=True):
-            #   - Use super().forward() (LlavaLlamaForCausalLM.forward)
-            #   - Pass output_hidden_states=True
-            #   - In training mode, hidden_states is a tuple of all layers → use [-1]
-            #   - In eval mode, hidden_states is already the last layer tensor
-            # We set model to training mode temporarily to get the tuple format
-            # consistent with how model_forward uses output_hidden_states[-1]
+            # ── Stage 1: Forward pass on input_ids (no generation) ──
             was_training = self.training
             self.train()
             fwd_output = super(SIDAForCausalLM, self).forward(
                 images=images_clip,
-                input_ids=output_ids,
+                input_ids=input_ids,
                 output_hidden_states=True,
             )
             if not was_training:
                 self.eval()
-            # output_hidden_states is a tuple of (num_layers+1) tensors
-            # Use [-1] to get the last layer, matching model_forward
-            output_hidden_states = fwd_output.hidden_states[-1]  # [B, expanded_seq_len, H]
 
-            # Build token masks — must match training (model_forward):
-            #   mask = cat([zeros(255), ids[:,1:], zeros(1)])
-            cls_token_mask = (output_ids[:, 1:] == self.cls_token_idx)
-            cls_token_mask = torch.cat([
-                cls_token_mask,
-                torch.zeros((cls_token_mask.shape[0], 1)).bool().cuda(),
-            ], dim=1)
-            cls_token_mask = torch.cat([
-                torch.zeros((cls_token_mask.shape[0], 255)).bool().cuda(),
-                cls_token_mask,
-            ], dim=1)
+            hs = fwd_output.hidden_states[-1]  # [1, T_expanded, H]
+            T_input = input_ids.shape[1]
+            T_hidden = hs.shape[1]
+            image_offset = T_hidden - T_input
+            H_dim = hs.shape[-1]
 
-            seg_token_mask = (output_ids[:, 1:] == self.seg_token_idx)
-            seg_token_mask = torch.cat([
-                torch.zeros((seg_token_mask.shape[0], 255)).bool().cuda(),
-                seg_token_mask,
-                torch.zeros((seg_token_mask.shape[0], 1)).bool().cuda(),
-            ], dim=1)
+            # Find structure token positions
+            cls_idx = (input_ids[0] == self.cls_token_idx).nonzero()[0].item()
+            obj_idx = (input_ids[0] == self.obj_token_idx).nonzero()[0].item()
+            seg_idx = (input_ids[0] == self.seg_token_idx).nonzero()[0].item()
 
-            obj_token_mask = None
-            if self.obj_token_idx is not None:
-                obj_token_mask = (output_ids[:, 1:] == self.obj_token_idx)
-                obj_token_mask = torch.cat([
-                    torch.zeros((obj_token_mask.shape[0], 255)).bool().cuda(),
-                    obj_token_mask,
-                    torch.zeros((obj_token_mask.shape[0], 1)).bool().cuda(),
-                ], dim=1)
+            cls_vec = hs[0, cls_idx + image_offset]
+            obj_vec = hs[0, obj_idx + image_offset]
+            seg_vec_raw = hs[0, seg_idx + image_offset]
 
-            # ---- Classification (same as model_forward) ----
-            assert len(self.model.cls_head) == 1
-            last_hidden_state_cls = self.model.cls_head[0](output_hidden_states)
-            cls_result = last_hidden_state_cls[cls_token_mask]
+            # ── Classification ──
+            cls_logits = self.model.cls_head[0](cls_vec)  # [3]
+            predicted_class = torch.argmax(cls_logits).item()
+            cls_probs = torch.softmax(cls_logits, dim=-1)
 
-            pred_masks = []
-            obj_preds = None
-            predicted_class = None
+            cls_label_map = {0: "real", 1: "fully synthetic", 2: "tampered"}
+            cls_info = {
+                "predicted_class": predicted_class,
+                "label": cls_label_map.get(predicted_class, "unknown"),
+                "probabilities": {
+                    cls_label_map[k]: cls_probs[k].item()
+                    for k in range(cls_probs.size(0))
+                    if k in cls_label_map
+                },
+            }
 
-            if cls_result.size(0) > 0:
-                predicted_class = torch.argmax(cls_result[-1], dim=-1).item()
+            # Decide whether this sample needs OBJ/seg
+            compute_seg_obj = (cls_label == 2) if cls_label is not None else (predicted_class == 2)
 
-            # ---- OBJ head ----
-            if predicted_class == 2 and obj_token_mask is not None and obj_token_mask.any():
-                obj_logits_all = self.model.obj_head(output_hidden_states)  # [B, T, K]
-                obj_logits = obj_logits_all[obj_token_mask]  # [N_obj, K]
-                obj_preds = torch.sigmoid(obj_logits)
+            # ── Non-tampered: early return (no generation, no SAM) ──
+            if not compute_seg_obj:
+                return input_ids, [], None, cls_info
 
-            # ---- Segmentation (same as model_forward) ----
-            if predicted_class == 2 and seg_token_mask.any():
-                hidden_states = []
-                hidden_states.append(self.model.text_hidden_fcs[0](output_hidden_states))
-                last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
-                pred_embeddings = last_hidden_state[seg_token_mask]
+            # ── Stage 2 (tampered only): OBJ head + segmentation ──
+            obj_logits = self.model.obj_head(obj_vec)  # [K]
+            obj_preds = torch.sigmoid(obj_logits)
 
-                seg_token_counts = seg_token_mask.int().sum(-1)
-                seg_token_offset = seg_token_counts.cumsum(-1)
-                seg_token_offset = torch.cat(
-                    [torch.zeros(1).long().cuda(), seg_token_offset], dim=0
+            seg_emb = self.model.seg_proj(seg_vec_raw)  # [out_dim]
+            mode = getattr(self, "seg_prompt_mode", "fuse")
+
+            # For seg_only we already have everything — skip generation entirely
+            if mode == "seg_only":
+                fused = seg_emb
+                output_ids = input_ids  # no generated text
+            else:
+                # fuse / text_only: need generated text
+                output_ids = self.generate(
+                    images=images_clip,
+                    input_ids=input_ids,
+                    max_new_tokens=max_new_tokens,
+                    num_beams=1,
                 )
 
-                pred_embeddings_ = []
-                for i in range(len(seg_token_offset) - 1):
-                    start_i, end_i = seg_token_offset[i], seg_token_offset[i + 1]
-                    pred_embeddings_.append(pred_embeddings[start_i:end_i])
-                pred_embeddings = pred_embeddings_
+                # Second forward pass on full output_ids to get text hidden states
+                self.train()
+                fwd_output2 = super(SIDAForCausalLM, self).forward(
+                    images=images_clip,
+                    input_ids=output_ids,
+                    output_hidden_states=True,
+                )
+                if not was_training:
+                    self.eval()
 
-                # Attention: cls guides seg
-                cls_projected = self.model.sida_fc1(cls_result)
-                enhanced_pred_embeddings = []
-                for i in range(len(pred_embeddings)):
-                    seg_embeddings = pred_embeddings[i]
-                    query = cls_projected[i].unsqueeze(0)
-                    key = seg_embeddings
-                    value = seg_embeddings
-                    try:
-                        attn_output, _ = self.model.attention_layer(
-                            query=query, key=key, value=value
-                        )
-                        enhanced_pred_embeddings.append(seg_embeddings + attn_output)
-                    except Exception as e:
-                        print(f"Error in attention layer: {e}")
-                        enhanced_pred_embeddings.append(seg_embeddings)
+                hs2 = fwd_output2.hidden_states[-1]
+                T_hidden2 = hs2.shape[1]
+                image_offset2 = T_hidden2 - output_ids.shape[1]
 
-                # Generate masks via SAM decoder
-                image_embeddings = self.get_visual_embs(images)
-                multimask_output = False
-                for i in range(len(enhanced_pred_embeddings)):
-                    sparse_embeddings, dense_embeddings = self.model.visual_model.prompt_encoder(
-                        points=None, boxes=None, masks=None,
-                        text_embeds=enhanced_pred_embeddings[i].unsqueeze(1),
-                    )
-                    sparse_embeddings = sparse_embeddings.to(enhanced_pred_embeddings[i].dtype)
-                    low_res_masks, iou_predictions = self.model.visual_model.mask_decoder(
-                        image_embeddings=image_embeddings[i].unsqueeze(0),
-                        image_pe=self.model.visual_model.prompt_encoder.get_dense_pe(),
-                        sparse_prompt_embeddings=sparse_embeddings,
-                        dense_prompt_embeddings=dense_embeddings,
-                        multimask_output=multimask_output,
-                    )
-                    pred_mask = self.model.visual_model.postprocess_masks(
-                        low_res_masks,
-                        input_size=resize_list[i],
-                        original_size=original_size_list[i],
-                    )
-                    pred_masks.append(pred_mask[:, 0])
+                # Recompute seg_idx in output_ids (same position, but offset may differ)
+                seg_idx2 = (output_ids[0] == self.seg_token_idx).nonzero()[0].item()
+                desc_start = seg_idx2 + image_offset2 + 1
+                desc_end = T_hidden2
+                desc_h = hs2[0, desc_start:desc_end, :]
 
-            # Build classification result dict
-            cls_info = None
-            if cls_result.size(0) > 0:
-                cls_label_map = {0: "real", 1: "fully synthetic", 2: "tampered"}
-                cls_probs = torch.softmax(cls_result[-1], dim=-1)
-                cls_info = {
-                    "predicted_class": predicted_class,
-                    "label": cls_label_map.get(predicted_class, "unknown"),
-                    "probabilities": {
-                        cls_label_map[k]: cls_probs[k].item()
-                        for k in range(cls_probs.size(0))
-                        if k in cls_label_map
-                    },
-                }
+                if desc_h.shape[0] > 0:
+                    text_vec = desc_h.mean(dim=0)
+                else:
+                    text_vec = torch.zeros(H_dim, device=hs.device, dtype=hs.dtype)
+                text_emb = self.model.text_proj(text_vec)  # [out_dim]
 
-            return output_ids, pred_masks, obj_preds, cls_info
+                if mode == "text_only":
+                    fused = text_emb
+                else:  # fuse
+                    gate = torch.sigmoid(self.model.gate_mlp(torch.cat([seg_emb, text_emb], dim=-1)))
+                    fused = gate * seg_emb + (1 - gate) * text_emb
+
+            # ── SAM decoder ──
+            image_embeddings = self.get_visual_embs(images)
+            text_embeds = fused.unsqueeze(0).unsqueeze(1)  # [1, 1, out_dim]
+            sparse_embeddings, dense_embeddings = self.model.visual_model.prompt_encoder(
+                points=None, boxes=None, masks=None, text_embeds=text_embeds,
+            )
+            sparse_embeddings = sparse_embeddings.to(fused.dtype)
+            low_res_masks, _ = self.model.visual_model.mask_decoder(
+                image_embeddings=image_embeddings[0].unsqueeze(0),
+                image_pe=self.model.visual_model.prompt_encoder.get_dense_pe(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings,
+                multimask_output=False,
+            )
+            pred_mask = self.model.visual_model.postprocess_masks(
+                low_res_masks,
+                input_size=resize_list[0],
+                original_size=original_size_list[0],
+            )
+
+            return output_ids, [pred_mask[:, 0]], obj_preds, cls_info

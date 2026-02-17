@@ -264,7 +264,7 @@ def main(args):
                 prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
 
             conv.append_message(conv.roles[0], prompt)
-            conv.append_message(conv.roles[1], "")
+            conv.append_message(conv.roles[1], "[CLS] [OBJ] [SEG] ")
             prompt = conv.get_prompt()
 
             # Load and preprocess image
@@ -335,58 +335,64 @@ def main(args):
             text_output = tokenizer.decode(new_tokens, skip_special_tokens=False)
             text_output = text_output.replace("\n", " ").replace("  ", " ").strip()
 
-            # Print result
+            # Determine predicted class
+            predicted_class = cls_info["predicted_class"]
+            label = cls_info["label"]
+
+            # Print classification result
             print("\n" + "="*70)
-            print("📝 Generated Text:")
+            icons = {"real": "✅ REAL", "fully synthetic": "🤖 FULLY SYNTHETIC", "tampered": "⚠️  TAMPERED"}
+            print(f"   Classification: {icons.get(label, label.upper())}")
+            for name, prob in cls_info["probabilities"].items():
+                print(f"     - {name}: {prob:.4f}")
             print("="*70)
-            print(f"   {text_output}")
-            print("="*70)
 
-            # Parse and highlight tokens
-            print("\n🔍 Token Analysis:")
-            if cls_info is not None:
-                label = cls_info["label"]
-                icons = {"real": "✅ REAL", "fully synthetic": "🤖 FULLY SYNTHETIC", "tampered": "⚠️  TAMPERED"}
-                print(f"   Classification: {icons.get(label, label.upper())}")
-                for name, prob in cls_info["probabilities"].items():
-                    print(f"     - {name}: {prob:.4f}")
+            if predicted_class == 0:
+                # Real
+                print("\n📝 Result: This image is real.")
 
-            if "[OBJ]" in text_output:
-                print("   Object Recognition: ✅ Present")
-                if obj_preds is not None and obj_preds.numel() > 0:
-                    OBJ_CLASS_NAMES = [
-                        "person", "bicycle", "car", "motorcycle", "airplane",
-                        "bus", "train", "truck", "boat", "traffic light",
-                        "fire hydrant", "stop sign", "parking meter", "bench",
-                        "bird", "cat", "dog", "horse", "sheep", "cow",
-                        "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
-                        "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard",
-                        "sports ball", "kite", "baseball bat", "baseball glove",
-                        "skateboard", "surfboard", "tennis racket", "bottle",
-                        "wine glass", "cup", "fork", "knife", "spoon", "bowl",
-                        "banana", "apple", "sandwich", "orange", "broccoli",
-                        "carrot", "hot dog", "pizza", "donut", "cake",
-                        "chair", "couch", "potted plant", "bed", "dining table",
-                        "toilet", "tv", "laptop", "mouse", "remote", "keyboard",
-                        "cell phone", "microwave", "oven", "toaster", "sink",
-                        "refrigerator", "book", "clock", "vase", "scissors",
-                        "teddy bear", "hair drier", "toothbrush", "background"
-                    ]
-                    for i in range(obj_preds.shape[0]):
-                        probs = obj_preds[i]
-                        detected = (probs > 0.5).nonzero(as_tuple=True)[0]
-                        if len(detected) > 0:
-                            names = [OBJ_CLASS_NAMES[idx] for idx in detected if idx < len(OBJ_CLASS_NAMES)]
-                            print(f"   Modified objects: {', '.join(names)}")
+            elif predicted_class == 1:
+                # Fully synthetic
+                print("\n📝 Result: This image is fully synthetic.")
 
-            if "[SEG]" in text_output:
-                print("   Segmentation: ✅ Present")
+            else:
+                # Tampered — display generated text, seg mask, and obj predictions
+                print("\n📝 Generated Description:")
+                print(f"   {text_output}")
 
-            if "[END]" in text_output:
-                print("   End Token: ✅ Present")
+                # Assert tampered must have segmentation mask and object predictions
+                assert len(pred_masks) > 0, \
+                    "Tampered prediction but no segmentation mask was produced!"
+                assert obj_preds is not None and obj_preds.numel() > 0, \
+                    "Tampered prediction but no object classification was produced!"
 
-            # Save masks if available
-            if len(pred_masks) > 0:
+                # Object classification
+                OBJ_CLASS_NAMES = [
+                    "person", "bicycle", "car", "motorcycle", "airplane",
+                    "bus", "train", "truck", "boat", "traffic light",
+                    "fire hydrant", "stop sign", "parking meter", "bench",
+                    "bird", "cat", "dog", "horse", "sheep", "cow",
+                    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
+                    "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard",
+                    "sports ball", "kite", "baseball bat", "baseball glove",
+                    "skateboard", "surfboard", "tennis racket", "bottle",
+                    "wine glass", "cup", "fork", "knife", "spoon", "bowl",
+                    "banana", "apple", "sandwich", "orange", "broccoli",
+                    "carrot", "hot dog", "pizza", "donut", "cake",
+                    "chair", "couch", "potted plant", "bed", "dining table",
+                    "toilet", "tv", "laptop", "mouse", "remote", "keyboard",
+                    "cell phone", "microwave", "oven", "toaster", "sink",
+                    "refrigerator", "book", "clock", "vase", "scissors",
+                    "teddy bear", "hair drier", "toothbrush", "background"
+                ]
+                detected = (obj_preds > 0.5).nonzero(as_tuple=True)[0]
+                if len(detected) > 0:
+                    names = [OBJ_CLASS_NAMES[idx] for idx in detected if idx < len(OBJ_CLASS_NAMES)]
+                    print(f"   Modified objects: {', '.join(names)}")
+                else:
+                    print("   Modified objects: (none above threshold)")
+
+                # Save masks
                 print(f"\n💾 Saving {len(pred_masks)} mask(s)...")
                 for i, pred_mask in enumerate(pred_masks):
                     if pred_mask.shape[0] == 0:
@@ -395,7 +401,6 @@ def main(args):
                     pred_mask = pred_mask.detach().cpu().numpy()[0]
                     pred_mask = pred_mask > 0
 
-                    # Save binary mask
                     base_name = os.path.splitext(os.path.basename(image_path))[0]
                     mask_path = os.path.join(
                         args.vis_save_path,
@@ -404,7 +409,6 @@ def main(args):
                     cv2.imwrite(mask_path, pred_mask.astype(np.uint8) * 255)
                     print(f"   ✅ Mask saved: {mask_path}")
 
-                    # Save visualized overlay
                     overlay_path = os.path.join(
                         args.vis_save_path,
                         f"{base_name}_overlay_{i}.jpg"
@@ -417,8 +421,6 @@ def main(args):
                     vis_img = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
                     cv2.imwrite(overlay_path, vis_img)
                     print(f"   ✅ Overlay saved: {overlay_path}")
-            else:
-                print("\n   ℹ️  No segmentation masks generated")
 
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user. Goodbye!")

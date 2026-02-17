@@ -1,20 +1,46 @@
-# 用 DeepSpeed 在单卡 GPU0 上跑 test.py 做“只评测不训练”的验证集评测。
-# 使用方法：
-# 1) 确认四个路径都存在：--version(模型目录)、--dataset_dir(数据集目录)、--vision_pretrained(SAM权重)、以及日志输出目录 ./logs/
-# 2) 需要指定一张可用 GPU：--include localhost:0 表示只用 0 号卡；如果想用 1 号卡改成 localhost:1
-# 3) master_port 需要是空闲端口；冲突就换一个（例如 24997 / 25000）
-# 4) precision 选择 bf16；bf16 需要硬件支持（如 RTX4090和RTXA6000都可以）
-# 5) 结果会写入 ./logs/*.log（stdout+stderr 都重定向进去），跑完后直接看该 log 即可
+#!/bin/bash
+# ============================================================
+# SIDA test.py evaluation script
+#
+# Usage:
+#   bash test.sh
+#
+# Before running, update the paths below to match your setup.
+# ============================================================
 
-mkdir -p ./evaluation/logs
+# ---------- Paths (modify these) ----------
+VERSION="finetune_SIDA-7B_ours-text_only"
+GPU=5
+SEG_PROMPT_MODE="text_only"          # seg_only | text_only | fuse
 
-deepspeed --include localhost:5 --master_port=24998 test.py \
-  --version="/data/ironman/jiacheng/final_Omni_Data/ck/finetune_SIDA-7B_ours-0.05_full-dataset_ablation1_obj-loss0.5" \
-  --dataset_dir='/data/ironman/jiacheng/final_Omni_Data/test/ours_0.05' \
-  --vision_pretrained="/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth" \
-  --test_dataset="validation" \
-  --precision='bf16' \
-  --exp_name="evaluation-SIDA-7B_ours_0.05_full-dataset_ablation1_obj-loss0.5" \
-  --test_only \
-  > ./evaluation/logs/evaluation-SIDA-7B_ours_0.05_full-dataset_ablation1_obj-loss0.5.log 2>&1
-  
+VERSION_DIR="/data/ironman/jiacheng/final_Omni_Data/ck/${VERSION}"
+DATASET_DIR="/data/ironman/jiacheng/final_Omni_Data/test/ours_0.05"
+VISION_PRETRAINED="/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth"
+OUTPUT_DIR="./evaluation/${VERSION}"
+
+# ---------- Settings ----------
+PRECISION="bf16"
+SPLIT="validation"
+SEG_PROMPT_MODE="fuse"          # seg_only | text_only | fuse
+OBJ_THRESHOLD=0.5
+MAX_NEW_TOKENS=128
+
+# ---------- Run ----------
+mkdir -p "${OUTPUT_DIR}"
+
+CUDA_VISIBLE_DEVICES="${GPU}" python test.py \
+  --version "${VERSION_DIR}" \
+  --dataset_dir "${DATASET_DIR}" \
+  --vision_pretrained "${VISION_PRETRAINED}" \
+  --split "${SPLIT}" \
+  --precision "${PRECISION}" \
+  --output_dir "${OUTPUT_DIR}" \
+  --seg_prompt_mode "${SEG_PROMPT_MODE}" \
+  --obj_threshold "${OBJ_THRESHOLD}" \
+  --max_new_tokens "${MAX_NEW_TOKENS}" \
+  --save_generated_text \
+  --use_mm_start_end \
+  --train_mask_decoder \
+  --save_generated_text \
+  --text_output_file ./evaluation/${VERSION}/generated_text.jsonl \
+  2>&1 | tee "${OUTPUT_DIR}/test.log"
