@@ -246,30 +246,121 @@ python chat.py \
 
 ## Model Architecture
 
+### Forward Pass Overview
+
+The forward pass (`model_forward`) proceeds in five stages:
+
+#### Stage 1 — Dual Image Encoding
+
+The input image is encoded by **two separate encoders** in parallel:
+
+- **SAM ViT-H** (`get_visual_embs`): encodes the raw high-resolution image into `image_embeddings` used later by the SAM mask decoder. This branch is always frozen (no gradient).
+- **CLIP ViT-L/14**: encodes image visual tokens that are injected into the LLM token sequence. Used by the LLaVA backbone for vision-language alignment.
+
+#### Stage 2 — LLM Forward Pass (LLaVA / LLaMA-2 + LoRA)
+
+The CLIP visual tokens are concatenated with the structured text input containing three special tokens: `[CLS]`, `[OBJ]`, and `[SEG]`. The full sequence is passed through LLaMA-2 (fine-tuned with LoRA) to produce:
+
+- `output_hidden_states[-1]`: the last-layer hidden state tensor of shape `[B, T_expanded, H_dim]`, where `T_expanded = T_input + num_image_tokens - 1`.
+- `text_loss`: the standard causal language modeling loss over the generated tampering description.
+
+#### Stage 3 — Special Token Extraction
+
+The positions of `[CLS]`, `[OBJ]`, and `[SEG]` in `input_ids` are located. Their corresponding hidden vectors are extracted from the last hidden state with an `image_offset` correction (to account for the extra image tokens inserted by LLaVA):
+
+```
+cls_vec = hs[b, cls_pos + image_offset]   # → Classification
+obj_vec = hs[b, obj_pos + image_offset]   # → Object recognition
+seg_vec = hs[b, seg_pos + image_offset]   # → Segmentation prompt
+```
+
+#### Stage 4 — Task Heads (Conditional on Class)
+
+All three heads run on every batch, but loss is only accumulated for the relevant subset:
+
+**Classification head** (all samples):
+```
+cls_logits = cls_head(cls_vec)   # [B, 3]: real / fully synthetic / tampered
+cls_loss   = CrossEntropyLoss(cls_logits, cls_labels)
+```
+
+**Object recognition head** (tampered samples only, `cls_label == 2`):
+```
+obj_logits = obj_head(obj_vec)   # [B, 81 COCO classes]
+obj_loss   = BCEWithLogitsLoss(obj_logits[tampered], obj_labels[tampered],
+                               pos_weight=dynamic_or_fixed)
+```
+> The object head is always included in the computation graph (via `obj_logits * 0.0`) to prevent DeepSpeed ZeRO all-reduce deadlocks across ranks.
+
+**Segmentation** (tampered samples only):
+
+For each tampered sample, a **gated fusion** mechanism combines the `[SEG]` token embedding with a text context embedding derived from the tokens generated *after* `[SEG]`:
+
+```
+seg_emb  = seg_proj(seg_vec)                          # [out_dim]
+text_emb = text_proj(mean(hs[seg_pos+1 : seq_end]))   # [out_dim]
+
+# Three ablation modes:
+#   seg_only  → fused = seg_emb
+#   text_only → fused = text_emb
+#   fuse      → gate  = sigmoid(gate_mlp([seg_emb, text_emb]))
+#                fused = gate * seg_emb + (1 - gate) * text_emb
+```
+
+The fused prompt embedding is passed to the **SAM prompt encoder** and then the **SAM mask decoder**:
+
+```
+sparse_emb, dense_emb = prompt_encoder(text_embeds=fused)
+low_res_masks, _      = mask_decoder(image_embeddings, sparse_emb, dense_emb)
+pred_mask             = postprocess_masks(low_res_masks, resize, original_size)
+```
+
+Mask loss = weighted BCE (sigmoid cross-entropy) + Dice loss against ground-truth (soft or hard) masks.
+
+#### Stage 5 — Total Loss
+
+```
+loss = mask_loss_weight  * (bce_loss + dice_loss)
+     + cls_loss_weight   * cls_loss
+     + obj_loss_weight   * obj_loss
+     + text_loss_weight  * text_loss
+```
+
+### Architecture Diagram
+
 ```
 Input Image
     │
-    ├──► SAM ViT-H Encoder ──► Image Embeddings ──► Mask Decoder ──► Segmentation Mask
-    │                                  ▲
-    ├──► CLIP Encoder ──► Visual Tokens │
-    │         │                        │
-    │         ▼                        │
-    │    LLaMA-2 LLM                   │
-    │    (with LoRA)                   │
-    │         │                        │
-    │         ├──► [CLS] token ──► cls_head ──► Classification (3-way)
-    │         │         │                          │
-    │         │         └── Attention Layer ────────┘ (integrates cls features into segmentation)
-    │         ├──► [OBJ] token ──► obj_head ──► Object Recognition (81 classes)
-    │         ├──► [SEG] token ──► Projection ──► Mask Decoder
-    │         └──► [END] token ──► End of sequence
+    ├──► SAM ViT-H Encoder (frozen) ──────────────────────────────────────────────────────┐
+    │         └──► image_embeddings                                                        │
+    │                                                                                      ▼
+    ├──► CLIP ViT-L/14 ──► visual tokens                                        SAM Mask Decoder
+    │         │                   │                                                        │
+    │         └─────────────────► LLaMA-2 (LoRA)  ◄── [CLS] [OBJ] [SEG] text tokens      │
+    │                                   │                                                  │
+    │                                   ├──► hs[[CLS]+offset] ──► cls_head ──► 3-way classification
+    │                                   │
+    │                                   ├──► hs[[OBJ]+offset] ──► obj_head ──► 81-class multi-label
+    │                                   │                           (tampered only)
+    │                                   │
+    │                                   └──► hs[[SEG]+offset] ──► seg_proj ──► seg_emb ──┐
+    │                                        hs[[SEG]+1:end]  ──► text_proj ──► text_emb ┤
+    │                                                                  gate_mlp ──► gate  │
+    │                                                         fused = gate*seg + (1-gate)*text
+    │                                                                    │
+    │                                              SAM Prompt Encoder ◄─┘
+    │                                                        │
+    └────────────────────────────────────────────────────────┴──► Segmentation Mask
+                                                                  (tampered only)
 ```
 
-Special tokens:
-- `[CLS]`: Triggers image-level classification
-- `[SEG]`: Triggers mask segmentation
-- `[OBJ]`: Triggers object category recognition
-- `[END]`: Marks end of the structured output
+### Special Tokens
+
+| Token | Role |
+|-------|------|
+| `[CLS]` | Its hidden state drives 3-way image classification (real / fully synthetic / tampered) |
+| `[OBJ]` | Its hidden state drives multi-label object recognition (81 COCO classes); used only for tampered images |
+| `[SEG]` | Its hidden state, fused with the generated description, forms the SAM segmentation prompt; used only for tampered images |
 
 ## Citation
 

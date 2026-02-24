@@ -25,14 +25,14 @@
 ################################################################################
 BASE_DIR="/data/ironman/jiacheng/final_Omni_Data"
 
-GPU="localhost:3"
-PORT=12346
+GPU="localhost:2"
+PORT=12459
 VERSION="${BASE_DIR}/ck/SIDA-7B"
-DATASET_DIR="${BASE_DIR}/train/ours_mask-only_0.05"
-VAL_DATASET="${BASE_DIR}/train/ours_mask-only_0.05/validation"
+DATASET_DIR="${BASE_DIR}/train/ours_0.05"
+VAL_DATASET="${BASE_DIR}/train/ours_0.05/validation"
 VISION_PRETRAINED="${BASE_DIR}/ck/sam_vit_h_4b8939.pth"
 LOG_BASE_DIR="${BASE_DIR}/runs"
-EXP_NAME="finetune_PIXAR-7B_mask-only_seg-only"
+EXP_NAME="finetune_PIXAR-7B_ours_fuse_text1.5"
 
 BATCH_SIZE=2
 EPOCHS=20
@@ -42,7 +42,8 @@ PRECISION="bf16"
 
 DICE_LOSS_WEIGHT=1.0
 OBJ_LOSS_WEIGHT=0.5
-SEG_PROMPT_MODE="seg_only"
+TEXT_LOSS_WEIGHT=1.5
+SEG_PROMPT_MODE="fuse"
 MASK_TYPE="ours"          # "ours" -> gt_soft_mask, "others" -> gt_mask
 ################################################################################
 
@@ -63,5 +64,6 @@ deepspeed --include ${GPU} --master_port=${PORT} train_SIDA.py \
   --steps_per_epoch=${STEPS_PER_EPOCH} \
   --precision="${PRECISION}" \
   --lr=${LR} \
+  --text_loss_weight ${TEXT_LOSS_WEIGHT} \
   --no_eval \
   --log_base_dir="${LOG_BASE_DIR}" > ./finetune/logs/${EXP_NAME}.log 2>&1 &

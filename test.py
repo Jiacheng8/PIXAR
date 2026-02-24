@@ -262,15 +262,19 @@ def main(args):
 
         # Ground-truth text description
         if cls_labels == 0:
-            gt_text_description = "This image is real."
+            gt_text_description = ""
         elif cls_labels == 1:
-            gt_text_description = "This image is fully synthetic."
+            gt_text_description = ""
         else:
             conv_str = conversations[0]
             seg_marker = "[SEG] "
             seg_pos = conv_str.find(seg_marker)
             if seg_pos >= 0:
                 gt_text_description = conv_str[seg_pos + len(seg_marker):].split("</s>")[0].strip()
+                hardcoded_prefix = "The image is tampered."
+                if gt_text_description.startswith(hardcoded_prefix):
+                    remaining = gt_text_description[len(hardcoded_prefix):].strip()
+                    gt_text_description = f"This image is tampered. {remaining}" if remaining else ""
             else:
                 gt_text_description = ""
 

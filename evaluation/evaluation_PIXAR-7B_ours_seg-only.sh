@@ -3,25 +3,26 @@
 # SIDA test.py evaluation script
 #
 # Usage:
-#   bash test.sh
+#   bash evaluation1.sh
 #
 # Before running, update the paths below to match your setup.
 # ============================================================
 
 # ---------- Paths (modify these) ----------
-VERSION="finetune_SIDA-7B_ours-text_only"
-GPU=5
-SEG_PROMPT_MODE="text_only"          # seg_only | text_only | fuse
+MAIN_DIR="/data/ironman/jiacheng/final_Omni_Data"
 
-VERSION_DIR="/data/ironman/jiacheng/final_Omni_Data/ck/${VERSION}"
-DATASET_DIR="/data/ironman/jiacheng/final_Omni_Data/test/ours_0.05"
-VISION_PRETRAINED="/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth"
-OUTPUT_DIR="./evaluation/${VERSION}"
+VERSION="finetune_PIXAR-7B_ours_seg-only"
+GPU=4
+SEG_PROMPT_MODE="seg_only"          # seg_only | text_only | fuse
+
+VERSION_DIR="${MAIN_DIR}/ck/${VERSION}"
+DATASET_DIR="${MAIN_DIR}/test/ours_0.05"
+VISION_PRETRAINED="${MAIN_DIR}/ck/sam_vit_h_4b8939.pth"
+OUTPUT_DIR="./evaluation/logs/${VERSION}"
 
 # ---------- Settings ----------
 PRECISION="bf16"
 SPLIT="validation"
-SEG_PROMPT_MODE="fuse"          # seg_only | text_only | fuse
 OBJ_THRESHOLD=0.5
 MAX_NEW_TOKENS=128
 
@@ -41,6 +42,4 @@ CUDA_VISIBLE_DEVICES="${GPU}" python test.py \
   --save_generated_text \
   --use_mm_start_end \
   --train_mask_decoder \
-  --save_generated_text \
-  --text_output_file ./evaluation/${VERSION}/generated_text.jsonl \
   2>&1 | tee "${OUTPUT_DIR}/test.log"
