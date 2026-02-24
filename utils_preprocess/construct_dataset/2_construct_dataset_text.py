@@ -131,6 +131,9 @@ def get_description(descriptions: dict, workspace: str, image_id: str, ann_id: s
     """
     从 descriptions 字典中获取对应的描述文本
     """
+    if "qwen" in workspace:
+        workspace = workspace[5:]
+        
     if workspace not in descriptions:
         return ""
 
@@ -139,8 +142,9 @@ def get_description(descriptions: dict, workspace: str, image_id: str, ann_id: s
 
     # 如果没有 ann_id，使用 "-1"
     lookup_ann_id = ann_id if ann_id else "-1"
-
-    return descriptions[workspace][image_id].get(lookup_ann_id, "")
+    text = descriptions[workspace][image_id].get(lookup_ann_id, "")
+    print(f"Found description: {text}")
+    return text
 
 
 def main():

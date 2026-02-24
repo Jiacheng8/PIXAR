@@ -7,60 +7,44 @@ cd /home/jiacheng/Omni_detection/PIXAR/utils_preprocess/construct_dataset || exi
 # -------------------------
 # Config
 # -------------------------
-DATASET_DIR="/data/ironman/jiacheng/final_Omni_Data/raw_outputs"
-OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/test/ours"
-DESCRIPTIONS_CSV="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions.csv"
+# 修改 TYPE 来切换数据类型：gemini3 | gpt | flux2 | gemini | seedream | qwen
+TYPE="qwen"
 
 TAOS=(0.05)
 
 # 控制是否处理 validation mock (注入到 trainset 目录)
 PROCESS_VAL_MOCK=true  # 设置为 false 可以跳过 validation mock 处理
+DATASET_DIR="/data/thor/jiacheng/omni_backup/raw_outputs"
+OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/test/${TYPE}"
+DESCRIPTIONS_CSV="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions.csv"
 
-# ===== Validation Mock 数据集分组 =====
+# ===== Validation Mock 数据集分组（根据 TYPE 动态生成）=====
+# gemini3 没有 motion 类别，其余类型均包含
+WITH_MOTION=true
+[[ "$TYPE" == "gemini3" ]] && WITH_MOTION=false
+
 val_w_anno_ids=(
-  coco_val_inter_replacement_1
-  coco_val_inter_replacement_2
-  coco_val_replacement_1
-  coco_val_replacement_2
-  flux2_coco_val_inter_replacement_1
-  flux2_coco_val_replacement_1
-  gemini_coco_val_inter_replacement_1
-  gemini_coco_val_replacement_1
-  seedream_coco_val_inter_replacement_1
-  seedream_coco_val_replacement_1
+  "${TYPE}_coco_val_inter_replacement_1"
+  "${TYPE}_coco_val_replacement_1"
+)
+[[ "$TYPE" == "qwen" ]] && val_w_anno_ids+=(
+  "${TYPE}_coco_val_inter_replacement_2"
+  "${TYPE}_coco_val_replacement_2"
 )
 
 val_w_anno_bg_ids=(
-  coco_val_removal_1
-  flux2_coco_val_removal_1
-  gemini_coco_val_removal_1
-  seedream_coco_val_removal_1
+  "${TYPE}_coco_val_removal_1"
 )
 
 val_wo_anno_ids=(
-  coco_val_addition
-  coco_val_color
-  coco_val_motion
-  coco_val_material
-  flux2_coco_val_addition
-  flux2_coco_val_color
-  flux2_coco_val_material
-  flux2_coco_val_motion
-  gemini_coco_val_addition
-  gemini_coco_val_color
-  gemini_coco_val_material
-  gemini_coco_val_motion
-  seedream_coco_val_addition
-  seedream_coco_val_color
-  seedream_coco_val_material
-  seedream_coco_val_motion
+  "${TYPE}_coco_val_addition"
+  "${TYPE}_coco_val_color"
+  "${TYPE}_coco_val_material"
 )
+[[ "$WITH_MOTION" == "true" ]] && val_wo_anno_ids+=("${TYPE}_coco_val_motion")
 
 val_wo_anno_bg_ids=(
-  coco_val_background
-  flux2_coco_val_background
-  gemini_coco_val_background
-  seedream_coco_val_background
+  "${TYPE}_coco_val_background"
 )
 
 # -------------------------
@@ -146,6 +130,7 @@ log "📂 workdir=$(pwd)"
 log "📥 dataset_dir=${DATASET_DIR}"
 log "📦 output_dir=${OUT_DIR}"
 log "📄 descriptions_csv=${DESCRIPTIONS_CSV}"
+log "🏷️  type=${TYPE}"
 log "🧪 taos=${TAOS[*]}"
 log "📝 log_file=${LOG_FILE}"
 log "🔧 Using unified script: 2_construct_dataset_text.py"
