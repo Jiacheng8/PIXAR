@@ -1,0 +1,40 @@
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[2026-03-07 16:58:09,712] [WARNING] [runner.py:232:fetch_hostfile] Unable to find hostfile, will proceed with training with local resources only.
+[2026-03-07 16:58:09,712] [INFO] [runner.py:630:main] cmd = /home/jiacheng/miniconda3/envs/pixar/bin/python3.10 -u -m deepspeed.launcher.launch --world_info=eyJsb2NhbGhvc3QiOiBbMF19 --master_addr=127.0.0.1 --master_port=12554 --enable_each_rank_log=None --log_level=info train_PIXAR.py --version=/data/ironman/jiacheng/final_Omni_Data/ck/PIXAR-7B --dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05 --vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth --val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation --batch_size=2 --exp_name=finetune_PIXAR-7B_ours_fuse_dice0.5 --epochs=20 --dice_loss_weight 0.5 --obj_loss_weight 0.5 --mask_type ours --seg_prompt_mode fuse --steps_per_epoch=1000 --precision=bf16 --lr=0.0001 --text_loss_weight 1.0 --no_eval --log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[2026-03-07 16:58:12,615] [INFO] [launch.py:162:main] WORLD INFO DICT: {'localhost': [0]}
+[2026-03-07 16:58:12,615] [INFO] [launch.py:168:main] nnodes=1, num_local_procs=1, node_rank=0
+[2026-03-07 16:58:12,615] [INFO] [launch.py:179:main] global_rank_mapping=defaultdict(<class 'list'>, {'localhost': [0]})
+[2026-03-07 16:58:12,615] [INFO] [launch.py:180:main] dist_world_size=1
+[2026-03-07 16:58:12,615] [INFO] [launch.py:184:main] Setting CUDA_VISIBLE_DEVICES=0
+[2026-03-07 16:58:12,616] [INFO] [launch.py:272:main] process 3674575 spawned with command: ['/home/jiacheng/miniconda3/envs/pixar/bin/python3.10', '-u', 'train_PIXAR.py', '--local_rank=0', '--version=/data/ironman/jiacheng/final_Omni_Data/ck/PIXAR-7B', '--dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05', '--vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth', '--val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation', '--batch_size=2', '--exp_name=finetune_PIXAR-7B_ours_fuse_dice0.5', '--epochs=20', '--dice_loss_weight', '0.5', '--obj_loss_weight', '0.5', '--mask_type', 'ours', '--seg_prompt_mode', 'fuse', '--steps_per_epoch=1000', '--precision=bf16', '--lr=0.0001', '--text_loss_weight', '1.0', '--no_eval', '--log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs']
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+add pos weight args done
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/jiacheng/Omni_detection/PIXAR/train_PIXAR.py", line 915, in <module>
+[rank0]:     main(sys.argv[1:])
+[rank0]:   File "/home/jiacheng/Omni_detection/PIXAR/train_PIXAR.py", line 156, in main
+[rank0]:     tokenizer = transformers.AutoTokenizer.from_pretrained(
+[rank0]:   File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/transformers/models/auto/tokenization_auto.py", line 652, in from_pretrained
+[rank0]:     tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+[rank0]:   File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/transformers/models/auto/tokenization_auto.py", line 496, in get_tokenizer_config
+[rank0]:     resolved_config_file = cached_file(
+[rank0]:   File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/transformers/utils/hub.py", line 417, in cached_file
+[rank0]:     resolved_file = hf_hub_download(
+[rank0]:   File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py", line 106, in _inner_fn
+[rank0]:     validate_repo_id(arg_value)
+[rank0]:   File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py", line 154, in validate_repo_id
+[rank0]:     raise HFValidationError(
+[rank0]: huggingface_hub.errors.HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name': '/data/ironman/jiacheng/final_Omni_Data/ck/PIXAR-7B'. Use `repo_type` argument if needed.
+[rank0]:[W307 16:58:16.313354062 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+[2026-03-07 16:58:17,620] [INFO] [launch.py:335:sigkill_handler] Killing subprocess 3674575
+[2026-03-07 16:58:17,620] [ERROR] [launch.py:341:sigkill_handler] ['/home/jiacheng/miniconda3/envs/pixar/bin/python3.10', '-u', 'train_PIXAR.py', '--local_rank=0', '--version=/data/ironman/jiacheng/final_Omni_Data/ck/PIXAR-7B', '--dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05', '--vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth', '--val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation', '--batch_size=2', '--exp_name=finetune_PIXAR-7B_ours_fuse_dice0.5', '--epochs=20', '--dice_loss_weight', '0.5', '--obj_loss_weight', '0.5', '--mask_type', 'ours', '--seg_prompt_mode', 'fuse', '--steps_per_epoch=1000', '--precision=bf16', '--lr=0.0001', '--text_loss_weight', '1.0', '--no_eval', '--log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs'] exits with return code = 1

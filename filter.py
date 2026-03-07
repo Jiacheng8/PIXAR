@@ -12,9 +12,9 @@ import tqdm
 import transformers
 from peft import LoraConfig, get_peft_model
 from torch.utils.tensorboard import SummaryWriter
-from model.SIDA import SIDAForCausalLM
+from model.PIXAR import PIXARForCausalLM
 from model.llava import conversation as conversation_lib
-from utils.SID_Set import collate_fn, CustomDataset
+from utils.PIXAR_Set import collate_fn, CustomDataset
 from utils.batch_sampler import BatchSampler
 import torch.distributed as dist
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
@@ -30,7 +30,7 @@ from PIL import Image
 import torchvision.transforms as T
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description="SIDA Model Training")
+    parser = argparse.ArgumentParser(description="PIXAR Model Training")
     parser.add_argument("--local_rank", default=0, type=int, help="node rank")
     parser.add_argument(
         "--version", default="liuhaotian/llava-llama-2-13b-chat-lightning-preview"
@@ -55,7 +55,7 @@ def parse_args(args):
     parser.add_argument("--test_dataset", default="test", type=str)
     parser.add_argument("--dataset_dir", default="./dataset", type=str)
     parser.add_argument("--log_base_dir", default="./runs", type=str)
-    parser.add_argument("--exp_name", default="sida", type=str)
+    parser.add_argument("--exp_name", default="pixar", type=str)
     parser.add_argument("--epochs", default=10, type=int)
     parser.add_argument("--steps_per_epoch", default=500, type=int)
     parser.add_argument(
@@ -157,7 +157,7 @@ def main(args):
         torch_dtype = torch.bfloat16
     elif args.precision == "fp16":
         torch_dtype = torch.half
-    model = SIDAForCausalLM.from_pretrained(
+    model = PIXARForCausalLM.from_pretrained(
         args.version, torch_dtype=torch_dtype, low_cpu_mem_usage=True, **model_args
     )
 
@@ -165,7 +165,7 @@ def main(args):
     model.config.bos_token_id = tokenizer.bos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
     print("\nChecking specific components:")
-    for component in [ "cls_head", "sida_fc1", "attention_layer", "text_hidden_fcs"]:
+    for component in [ "cls_head", "pixar_fc1", "attention_layer", "text_hidden_fcs"]:
         matching_params = [n for n, _ in model.named_parameters() if component in n]
         if matching_params:
             print(f"Found {component} in parameters: {matching_params}")
@@ -177,7 +177,7 @@ def main(args):
     vision_tower = model.get_model().get_vision_tower()
     vision_tower.to(dtype=torch_dtype, device=args.local_rank)
     if not args.test_only:
-        model.get_model().initialize_sida_modules(model.get_model().config)
+        model.get_model().initialize_pixar_modules(model.get_model().config)
 
     for p in vision_tower.parameters():
         p.requires_grad = False
@@ -206,7 +206,7 @@ def main(args):
                                 "mm_projector",
                                 "text_hidden_fcs",
                                 "cls_head",
-                                "sida_fc1",
+                                "pixar_fc1",
                                 "attention_layer",
                             ]
                         ]
@@ -240,7 +240,7 @@ def main(args):
         if any(
             [
                 x in n
-                for x in ["embed_tokens", "mask_decoder", "text_hidden_fcs","cls_head", "sida_fc1","attention_layer"]
+                for x in ["embed_tokens", "mask_decoder", "text_hidden_fcs","cls_head", "pixar_fc1","attention_layer"]
             ]
         ):
             p.requires_grad = True

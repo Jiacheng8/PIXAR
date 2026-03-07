@@ -1,0 +1,37 @@
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[2026-03-04 18:54:44,664] [WARNING] [runner.py:232:fetch_hostfile] Unable to find hostfile, will proceed with training with local resources only.
+[2026-03-04 18:54:44,664] [INFO] [runner.py:630:main] cmd = /home/jiacheng/miniconda3/envs/pixar/bin/python3.10 -u -m deepspeed.launcher.launch --world_info=eyJsb2NhbGhvc3QiOiBbMV19 --master_addr=127.0.0.1 --master_port=13551 --enable_each_rank_log=None --log_level=info train_SIDA.py --version=/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B --dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05 --vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth --val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation --batch_size=2 --exp_name=finetune_PIXAR-7B_ours_seg-only_text0.1 --epochs=20 --dice_loss_weight 1.0 --obj_loss_weight 0.5 --mask_type ours --seg_prompt_mode seg_only --steps_per_epoch=1000 --precision=bf16 --lr=0.0001 --text_loss_weight 0.1 --no_eval --log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[2026-03-04 18:54:47,583] [INFO] [launch.py:162:main] WORLD INFO DICT: {'localhost': [1]}
+[2026-03-04 18:54:47,583] [INFO] [launch.py:168:main] nnodes=1, num_local_procs=1, node_rank=0
+[2026-03-04 18:54:47,583] [INFO] [launch.py:179:main] global_rank_mapping=defaultdict(<class 'list'>, {'localhost': [0]})
+[2026-03-04 18:54:47,583] [INFO] [launch.py:180:main] dist_world_size=1
+[2026-03-04 18:54:47,583] [INFO] [launch.py:184:main] Setting CUDA_VISIBLE_DEVICES=1
+[2026-03-04 18:54:47,584] [INFO] [launch.py:272:main] process 2201163 spawned with command: ['/home/jiacheng/miniconda3/envs/pixar/bin/python3.10', '-u', 'train_SIDA.py', '--local_rank=0', '--version=/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B', '--dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05', '--vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth', '--val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation', '--batch_size=2', '--exp_name=finetune_PIXAR-7B_ours_seg-only_text0.1', '--epochs=20', '--dice_loss_weight', '1.0', '--obj_loss_weight', '0.5', '--mask_type', 'ours', '--seg_prompt_mode', 'seg_only', '--steps_per_epoch=1000', '--precision=bf16', '--lr=0.0001', '--text_loss_weight', '0.1', '--no_eval', '--log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs']
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+add pos weight args done
+Traceback (most recent call last):
+  File "/home/jiacheng/Omni_detection/PIXAR/train_SIDA.py", line 915, in <module>
+    main(sys.argv[1:])
+  File "/home/jiacheng/Omni_detection/PIXAR/train_SIDA.py", line 147, in main
+    deepspeed.init_distributed()
+  File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site
+Initializing SidaModel:
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:24<00:24, 24.72s/it][2026-03-04 18:55:36,678] [INFO] [launch.py:335:sigkill_handler] Killing subprocess 2200882
+[2026-03-04 18:55:36,679] [ERROR] [launch.py:341:sigkill_handler] ['/home/jiacheng/miniconda3/envs/pixar/bin/python3.10', '-u', 'train_SIDA.py', '--local_rank=0', '--version=/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B', '--dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05', '--vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth', '--val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation', '--batch_size=2', '--exp_name=finetune_PIXAR-7B_ours_seg-only_text0.1', '--epochs=20', '--dice_loss_weight', '1.0', '--obj_loss_weight', '0.5', '--mask_type', 'ours', '--seg_prompt_mode', 'seg_only', '--steps_per_epoch=1000', '--precision=bf16', '--lr=0.0001', '--text_loss_weight', '0.1', '--no_eval', '--log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs'] exits with return code = -15
+/site-packages/torch/distributed/rendezvous.py", line 269, in _env_rendezvous_handler
+    store = _create_c10d_store(
+  File "/home/jiacheng/miniconda3/envs/pixar/lib/python3.10/site-packages/torch/distributed/rendezvous.py", line 189, in _create_c10d_store
+    return TCPStore(
+RuntimeError: The server socket has failed to listen on any local network address. port: 13551, useIpv6: 0, code: -98, name: EADDRINUSE, message: address already in use
+[2026-03-04 18:54:51,587] [INFO] [launch.py:335:sigkill_handler] Killing subprocess 2201163
+[2026-03-04 18:54:51,588] [ERROR] [launch.py:341:sigkill_handler] ['/home/jiacheng/miniconda3/envs/pixar/bin/python3.10', '-u', 'train_SIDA.py', '--local_rank=0', '--version=/data/ironman/jiacheng/final_Omni_Data/ck/SIDA-7B', '--dataset_dir=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05', '--vision_pretrained=/data/ironman/jiacheng/final_Omni_Data/ck/sam_vit_h_4b8939.pth', '--val_dataset=/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/validation', '--batch_size=2', '--exp_name=finetune_PIXAR-7B_ours_seg-only_text0.1', '--epochs=20', '--dice_loss_weight', '1.0', '--obj_loss_weight', '0.5', '--mask_type', 'ours', '--seg_prompt_mode', 'seg_only', '--steps_per_epoch=1000', '--precision=bf16', '--lr=0.0001', '--text_loss_weight', '0.1', '--no_eval', '--log_base_dir=/data/ironman/jiacheng/final_Omni_Data/runs'] exits with return code = 1

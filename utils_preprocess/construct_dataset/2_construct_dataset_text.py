@@ -122,8 +122,7 @@ def load_descriptions(csv_path: str) -> dict:
                 descriptions[workspace][image_id] = {}
 
             descriptions[workspace][image_id][ann_id] = description
-
-    print(f"Loaded descriptions for {len(descriptions)} workspaces.")
+            
     return descriptions
 
 
@@ -143,7 +142,6 @@ def get_description(descriptions: dict, workspace: str, image_id: str, ann_id: s
     # 如果没有 ann_id，使用 "-1"
     lookup_ann_id = ann_id if ann_id else "-1"
     text = descriptions[workspace][image_id].get(lookup_ann_id, "")
-    print(f"Found description: {text}")
     return text
 
 
@@ -158,6 +156,8 @@ def main():
     ap.add_argument("--anno", action="store_true", help="Enable annotation mode (nested name/ann_id structure).")
     ap.add_argument("--bg", action="store_true", help="Mark as background dataset (for tracking purposes).")
     ap.add_argument("--descriptions-csv", default="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions.csv", help="Path to descriptions.csv file.")
+    ap.add_argument("--missing-csv-dir", default="./missing_text_logs", help="Directory to save the missing-text CSV report.")
+    ap.add_argument("--missing-csv-name", default="missing_text.csv", help="Filename of the missing-text CSV report.")
     args = ap.parse_args()
 
     # 加载 descriptions
@@ -208,6 +208,10 @@ def main():
     print(f"Background mode: {'Enabled' if args.bg else 'Disabled'}")
 
     dest_type = args.dest_type
+
+    # 收集没有找到 text 的 entry
+    missing_text_entries = []
+    missing_text_lock = threading.Lock()
 
     # 根据 --anno 参数决定处理逻辑
     if args.anno:
@@ -314,6 +318,15 @@ def main():
                 # ann_id 格式可能是 "ann_1227626_1438517"，需要去掉 "ann_" 前缀
                 ann_id_for_lookup = ann_id.replace("ann_", "") if ann_id.startswith("ann_") else ann_id
                 text_description = get_description(descriptions, args.id, name, ann_id_for_lookup)
+
+                if not text_description:
+                    with missing_text_lock:
+                        missing_text_entries.append({
+                            "dataset_id": args.id,
+                            "image_id": name,
+                            "ann_id": ann_id_for_lookup,
+                            "entry": entry,
+                        })
 
                 with open(dst_meta, "w", encoding="utf-8") as wf:
                     json.dump({
@@ -440,6 +453,15 @@ def main():
                 # 获取描述文本（wo-anno 使用 "-1" 作为 ann_id）
                 text_description = get_description(descriptions, args.id, name, "-1")
 
+                if not text_description:
+                    with missing_text_lock:
+                        missing_text_entries.append({
+                            "dataset_id": args.id,
+                            "image_id": name,
+                            "ann_id": "-1",
+                            "entry": entry,
+                        })
+
                 with open(dst_meta, "w", encoding="utf-8") as wf:
                     json.dump({
                         "cls": cls_info,
@@ -505,6 +527,17 @@ def main():
     # 写回 mapping.json
     with open(json_file, "w", encoding="utf-8") as f:
         json.dump(reverse_mapping, f, ensure_ascii=False, indent=2)
+
+    # 写出 missing-text CSV
+    os.makedirs(args.missing_csv_dir, exist_ok=True)
+    missing_csv_path = os.path.join(args.missing_csv_dir, args.missing_csv_name)
+    file_exists = os.path.exists(missing_csv_path)
+    with open(missing_csv_path, "a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["dataset_id", "image_id", "ann_id", "entry"])
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(missing_text_entries)
+    print(f"Missing-text report saved to: {missing_csv_path} ({len(missing_text_entries)} entries)")
 
     print("Done.")
 

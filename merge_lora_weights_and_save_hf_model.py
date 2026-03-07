@@ -9,7 +9,7 @@ import transformers
 from peft import LoraConfig, get_peft_model
 from transformers.modeling_utils import load_sharded_checkpoint
 
-from model.SIDA import SIDAForCausalLM
+from model.PIXAR import PIXARForCausalLM
 from utils.utils import DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN
 
 
@@ -77,7 +77,7 @@ def main(argv):
     tokenizer.pad_token = tokenizer.unk_token
 
     # 训练顺序：CLS -> SEG -> OBJ -> END -> (im_start, im_end)
-    # 顺序必须与 train_SIDA.py, test.py, chat.py 保持一致
+    # 顺序必须与 train_PIXAR.py, test.py, chat.py 保持一致
     tokenizer.add_tokens("[CLS]")
     tokenizer.add_tokens("[SEG]")
     tokenizer.add_tokens("[OBJ]")
@@ -104,7 +104,7 @@ def main(argv):
         # "num_obj_classes": 81,
     }
 
-    model = SIDAForCausalLM.from_pretrained(
+    model = PIXARForCausalLM.from_pretrained(
         args.version, torch_dtype=dtype, low_cpu_mem_usage=True, **model_args
     )
     model.config.eos_token_id = tokenizer.eos_token_id
@@ -113,7 +113,7 @@ def main(argv):
 
     model.get_model().initialize_vision_modules(model.get_model().config)
     model.get_model().get_vision_tower().to(dtype=dtype)
-    model.get_model().initialize_sida_modules(model.get_model().config)
+    model.get_model().initialize_pixar_modules(model.get_model().config)
 
     # ------ 3) 挂 LoRA 外壳（与训练相同的 target_modules）------
     if args.lora_r > 0:

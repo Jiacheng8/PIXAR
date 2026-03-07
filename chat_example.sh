@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Example script for running SIDA Interactive Chat
+# Example script for running PIXAR Interactive Chat
 # Usage: bash chat_example.sh
 export CUDA_VISIBLE_DEVICES=0
 python chat.py \
-    --version /data/ironman/jiacheng/final_Omni_Data/ck/finetune_PIXAR-7B_ours_seg-only\
+    --version /data/ironman/jiacheng/final_Omni_Data/ck/finetune_PIXAR-7B_ours_seg-only_text3.0\
     --vis_save_path ./vis_output \
     --precision bf16 \
     --image_size 1024 \
@@ -13,4 +13,6 @@ python chat.py \
     --conv_type llava_v1 \
     --max_new_tokens 512 \
     --num_obj_classes 81 \
-    --use_mm_start_end
+    --seg_prompt_mode seg_only \
+    --use_mm_start_end \
+    --generate_text_in_seg_only 

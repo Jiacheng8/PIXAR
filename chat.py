@@ -1,7 +1,7 @@
 """
-SIDA Interactive Chat Interface
+PIXAR Interactive Chat Interface
 
-This script provides an interactive command-line interface for testing the SIDA model.
+This script provides an interactive command-line interface for testing the PIXAR model.
 It allows you to:
 1. Input custom prompts
 2. Load images interactively
@@ -13,7 +13,7 @@ Usage:
 
 Example:
     python chat.py \
-        --version ./runs/sida_final_v1/ckpt_model \
+        --version ./runs/pixar_final_v1/ckpt_model \
         --precision fp16 \
         --vision-tower openai/clip-vit-large-patch14
 """
@@ -28,7 +28,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, BitsAndBytesConfig, CLIPImageProcessor
 
-from model.SIDA import SIDAForCausalLM
+from model.PIXAR import PIXARForCausalLM
 from model.llava import conversation as conversation_lib
 from model.llava.mm_utils import tokenizer_image_token
 from model.segment_anything.utils.transforms import ResizeLongestSide
@@ -37,7 +37,7 @@ from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
 
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description="SIDA Interactive Chat")
+    parser = argparse.ArgumentParser(description="PIXAR Interactive Chat")
     parser.add_argument("--version",
                         default="liuhaotian/llava-llama-2-13b-chat-lightning-preview",
                         help="Path to model checkpoint or HuggingFace model name")
@@ -73,6 +73,11 @@ def parse_args(args):
     # NEW: Object classification arguments
     parser.add_argument("--num_obj_classes", type=int, default=81,
                         help="Number of object categories for <OBJ> token")
+    parser.add_argument("--seg_prompt_mode", default="seg_only", type=str,
+                        choices=["seg_only", "fuse", "text_only"],
+                        help="Segmentation prompt mode")
+    parser.add_argument("--generate_text_in_seg_only", action="store_true", default=False,
+                        help="In seg_only mode, also generate text description")
 
     return parser.parse_args(args)
 
@@ -97,7 +102,7 @@ def preprocess(
 def print_banner():
     """Print welcome banner"""
     print("\n" + "="*70)
-    print("🤖 SIDA Interactive Chat Interface")
+    print("🤖 PIXAR Interactive Chat Interface")
     print("="*70)
     print("\nToken Sequence:")
     print("  [CLS] → Classification (real/synthetic/tampered)")
@@ -173,7 +178,7 @@ def main(args):
     print(f"\n🔧 Loading model from: {args.version}")
     print(f"   Precision: {args.precision}")
 
-    model = SIDAForCausalLM.from_pretrained(
+    model = PIXARForCausalLM.from_pretrained(
         args.version,
         low_cpu_mem_usage=True,
         vision_tower=args.vision_tower,
@@ -181,6 +186,7 @@ def main(args):
         cls_token_idx=args.cls_token_idx,
         obj_token_idx=args.obj_token_idx,
         num_obj_classes=args.num_obj_classes,
+        seg_prompt_mode=args.seg_prompt_mode,
         **kwargs
     )
 
@@ -326,13 +332,14 @@ def main(args):
                     original_size_list,
                     max_new_tokens=args.max_new_tokens,
                     tokenizer=tokenizer,
+                    generate_text=args.generate_text_in_seg_only,
                 )
 
             # Decode only the newly generated tokens (skip the input portion)
             input_token_len = input_ids.shape[1]
             new_tokens = output_ids[0][input_token_len:]
             new_tokens = new_tokens[new_tokens != IMAGE_TOKEN_INDEX]
-            text_output = tokenizer.decode(new_tokens, skip_special_tokens=False)
+            text_output = tokenizer.decode(new_tokens, skip_special_tokens=True)
             text_output = text_output.replace("\n", " ").replace("  ", " ").strip()
 
             # Determine predicted class

@@ -12,7 +12,7 @@ print("torch:", torch.__version__, "torch.cuda:", torch.version.cuda)
 print("LD_LIBRARY_PATH:", os.environ.get("LD_LIBRARY_PATH",""))
 PY
 
-# inside your sida env
+# inside your pixar env
 pip show torch deepspeed | sed 's/^/>>> /'
 
 # upgrade DS to a compatible version
@@ -28,7 +28,7 @@ PY
 pip install -U hf_transfer
 
 
-# In the sida env
+# In the pixar env
 conda install -y -c conda-forge "libstdcxx-ng>=12.2" "gcc=12.*" "gxx=12.*"
 
 # Make sure the env's lib dir is searched first

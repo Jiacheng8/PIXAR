@@ -1,5 +1,5 @@
-version="finetune_PIXAR-7B_ours_fuse_gemini3_0.05"
-gpu=5
+version="finetune_PIXAR-7B_ours_seg-only_text0.1_full_0.05_tampered_descriptions"
+gpu=0
 mkdir -p ./logs/${version}
 export CUDA_VISIBLE_DEVICES=${gpu}
 python compute_css.py \

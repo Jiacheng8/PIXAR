@@ -1,11 +1,11 @@
-# 用 DeepSpeed 在单卡 GPU 上对 SIDA-7B 进行微调训练（含分类 / 分割 / OBJ 多任务）。
+# 用 DeepSpeed 在单卡 GPU 上对 PIXAR-7B 进行微调训练（含分类 / 分割 / OBJ 多任务）。
 # 使用说明：
 # 1) GPU 选择：
 #    --include localhost:2 表示只使用第 2 张 GPU；如果想换卡，改成 localhost:0/1/3 等。
 # 2) 端口设置：
 #    --master_port 需保证当前机器未被占用；冲突时报错就换一个端口号。
 # 3) 模型与数据：
-#    --version           指向 SIDA 的初始权重目录（HF 格式）
+#    --version           指向 PIXAR 的初始权重目录（HF 格式）
 #    --dataset_dir       训练数据根目录（需包含 train/validation 划分或相应结构）
 #    --val_dataset       验证集路径（用于周期性验证与保存最优 checkpoint）
 #    --vision_pretrained SAM ViT-H 权重路径（用于分割模块）
@@ -27,7 +27,7 @@ BASE_DIR="/data/ironman/jiacheng/final_Omni_Data"
 
 GPU="localhost:3"
 PORT=12346
-VERSION="${BASE_DIR}/ck/SIDA-7B"
+VERSION="${BASE_DIR}/ck/PIXAR-7B"
 DATASET_DIR="${BASE_DIR}/train/ours_mask-only_0.05"
 VAL_DATASET="${BASE_DIR}/train/ours_mask-only_0.05/validation"
 VISION_PRETRAINED="${BASE_DIR}/ck/sam_vit_h_4b8939.pth"
@@ -48,7 +48,7 @@ MASK_TYPE="ours"          # "ours" -> gt_soft_mask, "others" -> gt_mask
 
 mkdir -p ./finetune/logs
 
-deepspeed --include ${GPU} --master_port=${PORT} train_SIDA.py \
+deepspeed --include ${GPU} --master_port=${PORT} train_PIXAR.py \
   --version="${VERSION}" \
   --dataset_dir="${DATASET_DIR}" \
   --vision_pretrained="${VISION_PRETRAINED}" \

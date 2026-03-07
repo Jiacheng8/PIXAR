@@ -10,9 +10,9 @@ import torch.nn.functional as F
 import tqdm
 import transformers
 
-from model.SIDA import SIDAForCausalLM
+from model.PIXAR import PIXARForCausalLM
 from model.llava import conversation as conversation_lib
-from utils.SID_Set import collate_fn, CustomDataset
+from utils.PIXAR_Set import collate_fn, CustomDataset
 from utils.utils import DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN, dict_to_cuda
 
 import matplotlib.pyplot as plt
@@ -137,7 +137,7 @@ def build_tokenizer_and_model(args):
         vision_tower=args.vision_tower,
         use_mm_start_end=args.use_mm_start_end,
     )
-    model = SIDAForCausalLM.from_pretrained(
+    model = PIXARForCausalLM.from_pretrained(
         args.version, torch_dtype=torch_dtype, low_cpu_mem_usage=True, **model_args
     )
     model.resize_token_embeddings(len(tokenizer))

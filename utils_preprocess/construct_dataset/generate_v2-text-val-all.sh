@@ -12,8 +12,9 @@ ALL_TYPES=(gemini3 gpt flux2 gemini seedream qwen)
 TAOS=(0.05)
 
 DATASET_DIR="/data/thor/jiacheng/omni_backup/raw_outputs"
-OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/test/demo"
+OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/test/full"
 DESCRIPTIONS_CSV="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions.csv"
+MISSING_CSV_DIR="./logs/missing_text_logs"
 
 # -------------------------
 # Logging helpers
@@ -54,7 +55,7 @@ run_one () {
   local bg_flag="$4"    # "true" or "false"
   local dest_type="$5"  # "train" or "validation"
 
-  local cmd="python 2_construct_dataset_text.py --id \"$id\" --tao \"$tao\" --dataset-dir \"$DATASET_DIR\" --output-dir \"$OUT_DIR\" --dest-type \"$dest_type\" --descriptions-csv \"$DESCRIPTIONS_CSV\""
+  local cmd="python 2_construct_dataset_text.py --id \"$id\" --tao \"$tao\" --dataset-dir \"$DATASET_DIR\" --output-dir \"$OUT_DIR\" --dest-type \"$dest_type\" --descriptions-csv \"$DESCRIPTIONS_CSV\" --missing-csv-dir \"$MISSING_CSV_DIR\""
 
   [[ "$anno_flag" == "true" ]] && cmd="$cmd --anno"
   [[ "$bg_flag"  == "true" ]] && cmd="$cmd --bg"
@@ -88,19 +89,20 @@ log "📂 workdir=$(pwd)"
 log "📥 dataset_dir=${DATASET_DIR}"
 log "📦 output_dir=${OUT_DIR}"
 log "📄 descriptions_csv=${DESCRIPTIONS_CSV}"
+log "📋 missing_csv_dir=${MISSING_CSV_DIR}"
 log "🏷️  types=${ALL_TYPES[*]}"
 log "🧪 taos=${TAOS[*]}"
 log "📝 log_file=${LOG_FILE}"
 
 for TYPE in "${ALL_TYPES[@]}"; do
 
-  # gemini3 没有 motion 类别，其余类型均包含
-  WITH_MOTION=true
-  [[ "$TYPE" == "gemini3" ]] && WITH_MOTION=false
-
   val_w_anno_ids=(
     "${TYPE}_coco_val_inter_replacement_1"
     "${TYPE}_coco_val_replacement_1"
+  )
+  [[ "$TYPE" == "qwen" ]] && val_w_anno_ids+=(
+    "${TYPE}_coco_val_inter_replacement_2"
+    "${TYPE}_coco_val_replacement_2"
   )
   val_w_anno_bg_ids=(
     "${TYPE}_coco_val_removal_1"
@@ -109,8 +111,8 @@ for TYPE in "${ALL_TYPES[@]}"; do
     "${TYPE}_coco_val_addition"
     "${TYPE}_coco_val_color"
     "${TYPE}_coco_val_material"
+    "${TYPE}_coco_val_motion"
   )
-  [[ "$WITH_MOTION" == "true" ]] && val_wo_anno_ids+=("${TYPE}_coco_val_motion")
   val_wo_anno_bg_ids=(
     "${TYPE}_coco_val_background"
   )
