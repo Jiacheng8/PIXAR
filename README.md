@@ -320,10 +320,5 @@ python chat.py --version <merged_model> --precision bf16 --seg_prompt_mode fuse
 If you find this work useful, please cite:
 
 ```bibtex
-@inproceedings{shang2026pixar,
-  title     = {From Masks to Pixels and Meaning: A New Taxonomy, Benchmark, and Metrics for VLM Image Tampering},
-  author    = {Shang, Xinyi and Tang, Yi and Cui, Jiacheng and Elhagry, Ahmed and Al Khatib, Salwa K. and Bsharat, Sondos Mahmoud and Liu, Jiacheng and Zhao, Xiaohan and Xue, Jing-Hao and Li, Hao and Khan, Salman and Shen, Zhiqiang},
-  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-  year      = {2026}
-}
+
 ```
