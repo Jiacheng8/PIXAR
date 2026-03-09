@@ -1,25 +1,24 @@
-
 #!/bin/bash
 # ============================================================
-# test_parallel.py evaluation script (multi-GPU)
+# PIXAR test.py evaluation script
 #
 # Usage:
-#   bash evaluation/evaluation_PIXAR-7B_ours_fuse_parallel.sh
+#   bash evaluation1.sh
 #
-# Before running, update GPUS and TYPE below.
+# Before running, update the paths below to match your setup.
 # ============================================================
+
+# ---------- Paths (modify these) ----------
 MAIN_DIR="/data/ironman/jiacheng/final_Omni_Data"
-TYPE="full_0.05"
-VERSION="finetune_PIXAR-13B_ours_seg-only"
-# GPUS="0,1|2,3|4,5"             # 3 workers，每个 worker 用 2 张卡
-# GPUS="0,1|2,3"             # 2 workers，每个 worker 用 2 张卡
-GPUS="0|1|2|3"             # 4 workers，每个 worker 用 1 张卡（需配合 --load_in_8bit）
-SEG_PROMPT_MODE="seg_only"     # seg_only | text_only | fuse
+TYPE="full_0.05"  # gpt_0.05 | ours_0.05 | gemini3_0.05
+VERSION="finetune_PIXAR-7B_ours_seg-only_text4.0"
+GPU="3,4,5"
+SEG_PROMPT_MODE="seg_only"          # seg_only | text_only | fuse
 
 VERSION_DIR="${MAIN_DIR}/ck/${VERSION}"
 DATASET_DIR="${MAIN_DIR}/test/${TYPE}"
 VISION_PRETRAINED="${MAIN_DIR}/ck/sam_vit_h_4b8939.pth"
-OUTPUT_DIR="./evaluation/logs/${VERSION}_${TYPE}_parallel"
+OUTPUT_DIR="./evaluation/logs/${VERSION}_${TYPE}"
 
 # ---------- Settings ----------
 PRECISION="bf16"
@@ -40,7 +39,8 @@ python test_parallel.py \
   --seg_prompt_mode "${SEG_PROMPT_MODE}" \
   --obj_threshold "${OBJ_THRESHOLD}" \
   --max_new_tokens "${MAX_NEW_TOKENS}" \
-  --gpus "${GPUS}" \
+  --gpus "${GPU}" \
+  --generate_text_in_seg_only \
   --save_generated_text \
   --use_mm_start_end \
   --train_mask_decoder \

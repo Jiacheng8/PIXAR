@@ -1,4 +1,4 @@
-version="finetune_PIXAR-7B_ours_seg-only_text0.1_full_0.05_tampered_descriptions"
+version="finetune_PIXAR-7B_ours_seg-only_text3.0_full_0.05"
 gpu=0
 mkdir -p ./logs/${version}
 export CUDA_VISIBLE_DEVICES=${gpu}

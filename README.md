@@ -1,53 +1,66 @@
 <div align="center">
 
-<h3><img src="./assets/logo.svg" alt="PIXAR Logo" height="50" style="vertical-align:middle;">&ensp;<em>From Masks to Pixels and Meaning:<br>A New Taxonomy, Benchmark, and Metrics for VLM Image Tampering</em></h3>
+<img src="./assets/logo.svg" alt="PIXAR Logo" height="80">
+
+# From Masks to Pixels and Meaning
+### A New Taxonomy, Benchmark, and Metrics for VLM Image Tampering
 
 <p>
-  <a href=""><img src="https://img.shields.io/badge/Paper-PDF-blue?style=flat-square&logo=adobeacrobatreader" alt="Paper"></a>
+  <a href=""><img src="https://img.shields.io/badge/Paper-PDF-blue?style=for-the-badge&logo=adobeacrobatreader" alt="Paper"></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/Benchmark-420K%2B%20pairs-orange?style=flat-square" alt="Benchmark">
+  <a href="https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=sharing"><img src="https://img.shields.io/badge/Dataset-Google%20Drive-yellow?style=for-the-badge&logo=googledrive" alt="Dataset"></a>
+  &nbsp;
+  <a href="https://huggingface.co/saberzl/SIDA-7B"><img src="https://img.shields.io/badge/Model-HuggingFace-orange?style=for-the-badge&logo=huggingface" alt="Model"></a>
+  &nbsp;
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-lightgrey?style=for-the-badge" alt="License"></a>
+</p>
+
+<p>
+  <img src="https://img.shields.io/badge/Benchmark-420K%2B%20pairs-purple?style=flat-square" alt="Benchmark">
   &nbsp;
   <img src="https://img.shields.io/badge/Tasks-Classification%20%7C%20Localization%20%7C%20Description-green?style=flat-square" alt="Tasks">
   &nbsp;
-  <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square" alt="License">
+
 </p>
 
 <p>
-<strong>Xinyi Shang</strong>*&ensp;
-<strong>Yi Tang</strong>*&ensp;
-<strong>Jiacheng Cui</strong>*&ensp;
-<strong>Ahmed Elhagry</strong>&ensp;
-<strong>Salwa K. Al Khatib</strong><br>
-<strong>Sondos Mahmoud Bsharat</strong>&ensp;
-<strong>Jiacheng Liu</strong>&ensp;
-<strong>Xiaohan Zhao</strong>&ensp;
-<strong>Jing-Hao Xue</strong>&ensp;
-<strong>Hao Li</strong>&ensp;
-<strong>Salman Khan</strong>&ensp;
-<strong>Zhiqiang Shen</strong>†
+<a href="https://shangxinyi.github.io/"><strong>Xinyi Shang</strong></a>*&ensp;
+<a href="https://github.com/TangentOne"><strong>Yi Tang</strong></a>*&ensp;
+<a href="https://jiachengcui.com/"><strong>Jiacheng Cui</strong></a>*&ensp;
+<a href="https://www.linkedin.com/in/ahmed-adel-elhagry/"><strong>Ahmed Elhagry</strong></a>&ensp;
+<a href="https://scholar.google.com/citations?user=TWtF0CAAAAAJ&hl=en"><strong>Salwa K. Al Khatib</strong></a><br>
+<a href="https://scholar.google.com/citations?user=m10_qBQAAAAJ&hl=en"><strong>Sondos Mahmoud Bsharat</strong></a>&ensp;
+<a href="https://scholar.google.com/citations?hl=en&user=_awln6YAAAAJ"><strong>Jiacheng Liu</strong></a>&ensp;
+<a href="https://scholar.google.com/citations?user=PliLuD4AAAAJ&hl=en"><strong>Xiaohan Zhao</strong></a>&ensp;
+<a href="https://www.homepages.ucl.ac.uk/~ucakjxu/"><strong>Jing-Hao Xue</strong></a>&ensp;
+<a href="https://www.hao-li.com/Hao_Li/Hao_Li_-_about_me.html"><strong>Hao Li</strong></a>&ensp;
+<a href="https://salman-h-khan.github.io/"><strong>Salman Khan</strong></a>&ensp;
+<a href="https://zhiqiangshen.com/"><strong>Zhiqiang Shen</strong></a>†
 </p>
 
-<p><sub>* Equal contribution &nbsp;|&nbsp; † Corresponding author &nbsp;|&nbsp; Preprint</sub></p>
+<sub>* Equal contribution &emsp;|&emsp; † Corresponding author</sub>
 
-<br>
+<br><br>
 
 <img src="./assets/motivation.png" alt="PIXAR Motivation" width="850">
 <p><sub><em>Mask-based labels misalign with true edit signals (top). Our pixel-difference labels are precisely aligned with the generative footprint (bottom).</em></sub></p>
 
 <br>
 
-> **TL;DR**: We expose a fundamental flaw in mask-based tampering benchmarks, and introduce **PIXAR**: a 420K+ benchmark with pixel-faithful labels, 8 manipulation types, and a VLM detector that simultaneously localizes, classifies, and describes tampered regions, achieving **2.7× IoU improvement** over prior SOTA.
+> **TL;DR** &nbsp;We expose a fundamental flaw in mask-based tampering benchmarks and introduce **PIXAR**: a 420K+ benchmark with pixel-faithful labels, 8 manipulation types, and a VLM detector that simultaneously localizes, classifies, and describes tampered regions, achieving **2.7× IoU improvement** over prior SOTA.
 
 </div>
 
 ---
 
 ## 🔥 News
-- **[2026-03]** 📦 Code and model weights and PIXAR benchmark (420K+ pairs) are released.
-- **[2026-02]** 🎉 Paper accepted to **CVPR 2026 Findings** (withdrawn for resubmission).
+
+- **[2026-03]** 📦 🚀 Major Update: Code and pre-trained weights are now available, along with our large-scale PIXAR benchmark (420K+ pairs).
+- **[2026-02]** 📑 Paper Status: Accepted to CVPR 2026 Findings. We have opted to withdraw it for further enhancement and resubmission.
+
 ---
 
-## Overview
+## 📖 Overview
 
 Existing tampering benchmarks rely on coarse object masks as ground truth, which severely misalign with the true edit signal: many pixels inside a mask are untouched, while subtle yet consequential edits outside the mask are treated as natural. We reformulate VLM image tampering from coarse region labels to a **pixel-grounded, meaning- and language-aware** task.
 
@@ -59,14 +72,9 @@ Existing tampering benchmarks rely on coarse object masks as ground truth, which
 
 ---
 
-## Motivation
+## 💡 Motivation
 
-<div align="center">
-<img src="./assets/motivation.png" alt="Motivation" width="800">
-<p><em><b>Pitfalls of current benchmarks.</b> Mask-based labels contain large misaligned regions. Our pixel-difference label is precisely aligned with the true generative pixels.</em></p>
-</div>
-
-Existing benchmarks use coarse object masks as ground truth, conflating unedited pixels inside the mask with tamper evidence while ignoring real edits outside it. We replace masks with a per-pixel difference map **D** = |I_orig − I_gen|, thresholded at a tunable τ to obtain **M**_τ — capturing micro-edits at small τ and high-confidence semantic changes at large τ.
+Existing benchmarks typically rely on coarse object masks as ground truth, which often conflates unedited pixels within the mask with actual tamper evidence, while simultaneously overlooking subtle edits beyond the mask boundaries. To alleviate this, we replace binary masks with a per-pixel difference map $D = |I_{\text{orig}} - I_{\text{gen}}|$. By applying a tunable threshold $\tau$, we derive $M_\tau$, which is a dynamic ground truth that encapsulates both micro-edits at lower $\tau$ values and high-confidence semantic changes at higher $\tau$ values.
 
 <div align="center">
 <img src="./assets/vis_tau_1.png" alt="Tau visualization" width="750">
@@ -75,115 +83,76 @@ Existing benchmarks use coarse object masks as ground truth, conflating unedited
 
 ---
 
-## PIXAR Benchmark
+## 📦 PIXAR Benchmark
 
 | Split | Size | Labels |
-|---|---|---|
-| Training | 420K+ image pairs | Pixel-level M_τ, semantic class, text description |
-| Test | 40K image pairs (balanced) | Pixel-level M_τ, semantic class, text description |
+|:---:|:---:|:---|
+| Training | 420K+ image pairs | Pixel-level $M_\tau$, semantic class, text description, tampered or not |
+| Test | 40K image pairs (balanced) | Pixel-level $M_\tau$, semantic class, text description, tampered or not |
 
-8 tampering types (replacement, removal, addition, material/color/attribute change, splice, inpaint) generated by Flux.2, Gemini 2.5/3, GPT-image-1.5, Qwen-Image, Seedream 4.5. Each entry includes the raw per-pixel difference map so labels can be re-derived at any τ. A four-stage pipeline (generation → effectiveness checks → fidelity assessment by Qwen3 + human review → label construction) ensures high quality.
-
-| Dataset | Year | Multi-Object | Fidelity Check | Ground Truth |
-|---|---|---|---|---|
-| SIDBench / M3Dsynth / SemiTruths / SID-Set | 2024–25 | ✗ | ✗ | Mask |
-| **PIXAR (Ours)** | **2026** | **✓** | **✓** | **Pixel & Semantics** |
 
 ---
 
-## Method
+## 🔬 Method
 
 <div align="center">
 <img src="./assets/method.png" alt="PIXAR Method" width="800">
-<p><em><b>PIXAR training framework.</b> The model jointly trains a CLS head for image-level detection, an OBJ head for semantic classification, a SEG head for pixel-level localization, and a text decoder for tamper description generation.</em></p>
 </div>
-
-The PIXAR detector fθ takes an image and a user prompt, and simultaneously produces:
-- **(i)** a per-pixel tamper logit map **S** ∈ ℝ^(H×W) → predicted mask **M̂**
-- **(ii)** a multi-label semantic logit vector **z** ∈ ℝ^|C| → object category predictions **ŷ**
-- **(iii)** a natural language description of the specific tampering artifact
 
 ### Architecture
 
-Built on LLaVA + LLaMA-2 with LoRA fine-tuning, integrated with SAM ViT-H for pixel-level decoding and CLIP ViT-L/14 for visual-language alignment.
-
-Three special tokens anchor the multi-task heads in the token sequence:
+Built on LLaVA + LLaMA-2 with LoRA fine-tuning, integrated with SAM ViT-H for pixel-level decoding and CLIP ViT-L/14 for visual-language alignment. Three special tokens anchor the multi-task heads in the token sequence:
 
 | Token | Role |
-|---|---|
+|:---:|:---|
 | `[CLS]` | Hidden state → 3-way classification (real / tampered) via `FC_cls` |
 | `[OBJ]` | Hidden state → multi-label object recognition (81 COCO classes) via `FC_obj` |
 | `[SEG]` | Hidden state fused with generated text → SAM prompt for pixel localization via `FC_seg` |
 
 ### Training Objective
 
-```
-L_total = λ_sem · L_sem  +  λ_bce · L_bce  +  λ_dice · L_dice  +  λ_text · L_text  +  λ_cls · L_cls
-```
+$$\mathcal{L}_\text{total} = \lambda_\text{sem}\,\mathcal{L}_\text{sem} + \lambda_\text{bce}\,\mathcal{L}_\text{bce} + \lambda_\text{dice}\,\mathcal{L}_\text{dice} + \lambda_\text{text}\,\mathcal{L}_\text{text} + \lambda_\text{cls}\,\mathcal{L}_\text{cls}$$
 
-Default weights: λ_sem = 0.1, λ_dice = 1.0, λ_text = 2.0.
+Default weights: $\lambda_\text{sem}$ = 0.1, $\lambda_\text{cls}$ = 1.0, $\lambda_\text{bce}$ = 1.0, $\lambda_\text{dice}$ = 1.0, $\lambda_\text{text}$ = 3.0.
 
 ### Segmentation Prompt Modes
 
-The `[SEG]` token embedding can be fused with the generated text description in three ablation modes:
+The `[SEG]` token embedding can be fused with the generated text description in three modes:
 
-| Mode | Fused prompt |
-|---|---|
-| `seg_only` | seg_emb only |
-| `text_only` | text_emb only |
-| `fuse` | gate · seg_emb + (1 − gate) · text_emb, gate = σ(MLP([seg_emb, text_emb])) |
+| Mode | Description |
+|:---:|:---|
+| `seg_only` | Uses seg_emb only |
+| `text_only` | Uses text_emb only |
+| `fuse` | `gate · seg_emb + (1 − gate) · text_emb`, where `gate = σ(MLP([seg_emb, text_emb]))` |
 
 ---
 
-## Results
+## 📊 Results
 
 <div align="center">
 <img src="./assets/exp.png" alt="Experimental Results" width="750">
 </div>
 
-> PIXAR-7B achieves a near-doubling of localization accuracy over SIDA-7B (IoU 6.9 → 18.5). PIXAR-13B further sets new SOTA across all metrics.
+---
 
-## Project Structure
+## 🗂️ Project Structure
 
-```
-PIXAR/
-├── assets/                          # Paper figures and PDF
-│   ├── method.png
-│   ├── motivation.png
-│   ├── vis_tau_1.png
-│   └── exp.png
-├── model/
-│   ├── PIXAR.py                     # Core model: PIXARForCausalLM
-│   ├── llava/                       # LLaVA backbone
-│   └── segment_anything/            # SAM encoder
-├── finetune/
-│   ├── finetune_PIXAR-7B_*.sh       # Training scripts 
-├── evaluation/
-│   ├── evaluation_PIXAR-7B_*.sh     # Evaluation scripts
-│   ├── text_eval/
-│   │   └── compute_css.py           # Cosine Semantic Similarity scoring
-│   └── README.md                    # Evaluation guide
-├── utils/
-│   ├── PIXAR_Set.py                 # Dataset class (CustomDataset)
-│   ├── utils.py                     # AverageMeter, IoU computation
-│   └── batch_sampler.py             # Custom distributed batch sampler
-├── utils_preprocess/                # Dataset construction scripts
-├── download-data/                   # Data download scripts
-│   ├── download.sh
-│   ├── files.txt
-│   └── README.md
-├── train_PIXAR.py                   # Main training script
-├── test_parallel.py                 # Multi-GPU parallel evaluation
-├── chat.py                          # Interactive inference
-├── merge_lora_weights_and_save_hf_model.py
-├── merge.sh
-├── visualization.py
-└── filter.py
-```
+- **`model/`** — Core model (`PIXARForCausalLM`): LLaVA backbone + SAM ViT-H encoder + `[CLS]`/`[OBJ]`/`[SEG]` multi-task heads.
+- **`finetune/`** — DeepSpeed training scripts for various LoRA and hyperparameter configurations.
+- **`evaluation/`** — Evaluation launchers and metrics; `text_eval/compute_css.py` scores descriptions via CSS.
+- **`utils/`** — Dataset class, IoU metrics, and distributed batch sampler.
+- **`download-data/`** — rclone scripts to download and extract the raw PIXAR dataset from Google Drive.
+- **`utils_preprocess/`** — Builds the dataset from raw image pairs: generates pixel-difference maps and labels at any $\tau$.
+- **`train_PIXAR.py`** — Main training entry point.
+- **`test_parallel.py`** — Multi-GPU parallel evaluation.
+- **`chat.py`** — Interactive single-image inference.
+- **`merge_lora_weights_and_save_hf_model.py`** / **`merge.sh`** — Merges LoRA adapters and exports to HuggingFace format.
 
 ---
 
-## Environment Setup
+## ⚙️ Environment Setup
+
+**Requires Python 3.10.**
 
 ### 1. Install Dependencies
 
@@ -191,36 +160,41 @@ PIXAR/
 pip install -r requirements.txt
 ```
 
-Python 3.10
-
 ### 2. Fix Environment
+
+Some packages require minor patches after installation. Run:
 
 ```bash
 bash fix/fix.sh
 ```
 
-if it is not working, please run fix_again.sh
+If issues persist, run `fix/fix_again.sh`.
 
 ### 3. Pretrained Weights
 
-| Component | Description |
-|---|---|
-| PIXAR-7B base model | HuggingFace-format LLaVA-LLaMA-2 base |
-| SAM ViT-H | `sam_vit_h_4b8939.pth` |
+Download the following weights and place them in your preferred directory:
+
+| Component | Details |
+|:---|:---|
+| [SIDA-7B base model](https://huggingface.co/saberzl/SIDA-7B) | HuggingFace-format LLaVA-LLaMA-2 base |
+| [SAM ViT-H](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth) | `sam_vit_h_4b8939.pth` |
 | CLIP ViT-L/14 | `openai/clip-vit-large-patch14` (auto-downloaded) |
 
-### 4. Download Data
+### 4. Pre-processed PIXAR Dataset
+
+See the [Data](#-data) section below.
 
 ---
 
-## Data
+## 🗄️ Data
 
 We provide two ways to obtain the PIXAR dataset:
 
-**Option A — Download preprocessed data (recommended).** Training and test sets preprocessed at τ = 0.05 are available on [Google Drive](https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=sharing).
+> **Option A — Download preprocessed data (recommended)**
+> Training and test sets preprocessed at $\tau$ = 0.05 are available on [Google Drive](https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=sharing).
 
-**Option B — Build from raw data with a custom τ.** For users who wish to construct labels at a different threshold, we release the raw image pairs alongside the pixel-difference maps, allowing labels to be re-derived at any τ. See [Custom Dataset Processing](#custom-dataset-processing) for details.
-
+> **Option B — Build from raw data with a custom $\tau$**
+> We release the raw image pairs alongside the pixel-difference maps, allowing labels to be re-derived at any $\tau$. See [Custom Dataset Processing](#custom-dataset-processing) for details.
 
 ### Dataset Format
 
@@ -237,30 +211,26 @@ dataset_dir/
     └── (same structure)
 ```
 
----
+### Custom Dataset Processing
 
-## Custom Dataset Processing
+If you want to build the dataset from scratch at a different $\tau$, follow these two steps.
 
-If you want to build the dataset from scratch at a different τ (e.g., τ = 0.1 to focus on high-confidence edits, or τ = 0.01 for micro-edits), follow these two steps.
+**Step 1 — Download raw data**
 
-### Step 1 — Download raw data
-
-Follow [`download-data/README.md`](./download-data/README.md) to configure rclone, populate `download-data/files.txt` with the raw zip filenames from Google Drive, and run:
+Follow [`download-data/README.md`](./download-data/README.md) to configure rclone, populate `download-data/files.txt` with the raw zip filenames, and run:
 
 ```bash
 bash download-data/download.sh
 ```
 
-This downloads and extracts raw image pairs into `DOWNLOAD_DIR`.
+**Step 2 — Build dataset at your preferred $\tau$**
 
-### Step 2 — Build dataset at your preferred τ
-
-Open `utils_preprocess/construct_dataset/generate_v2.sh` (mask-only supervision) or `generate_v2-text.sh` (with text descriptions) and edit the config block at the top:
+Edit the config block in `utils_preprocess/construct_dataset/generate_v2.sh`:
 
 ```bash
 DATASET_DIR="/path/to/raw_outputs"   # output of download.sh
 OUT_DIR="/path/to/output_dataset"    # where to write the processed dataset
-TAOS=(0.05)                          # change to e.g. (0.01) (0.1) (0.2) or multiple values
+TAOS=(0.05)                          # e.g. (0.01) (0.1) (0.2) or multiple values
 ```
 
 Then run:
@@ -268,27 +238,24 @@ Then run:
 ```bash
 cd utils_preprocess/construct_dataset
 
-# Mask-only labels (no text descriptions)
-bash generate_v2.sh
-
-# Labels + text descriptions (requires descriptions.csv)
-bash generate_v2-text.sh
+bash generate_v2.sh          # mask-only labels
+bash generate_v2-text.sh     # labels + text descriptions (requires descriptions.csv)
 ```
 
-The script calls `2_construct_dataset.py` / `2_construct_dataset_text.py` for each data split and τ value, logging results under `utils_preprocess/construct_dataset/logs/`.
+**$\tau$ selection guide:**
 
-**τ selection guide:**
-
-| τ | Effect |
-|---|---|
+| $\tau$ | Effect |
+|:---:|:---|
 | 0.01 | Captures micro-edits and subtle pixel changes |
-| 0.05 | Default — balanced sensitivity (recommended) |
+| **0.05** | **Default — balanced sensitivity (recommended)** |
 | 0.1 | High-confidence semantic changes only |
 | 0.2 | Conservative — only large, obvious edits |
 
 ---
 
-## Training
+## 🚀 Training
+
+You can launch training directly or use the provided scripts under `finetune/`:
 
 ```bash
 deepspeed --include localhost:0 --master_port=12345 train_PIXAR.py \
@@ -301,13 +268,25 @@ deepspeed --include localhost:0 --master_port=12345 train_PIXAR.py \
   --precision bf16 --exp_name "pixar_experiment" --log_base_dir ./runs
 ```
 
-Or use the provided scripts, e.g. `bash finetune/finetune_PIXAR-7B_ours_fuse.sh`. Key hyperparameters: LoRA rank 8, λ_dice = 1.0, λ_sem = 0.1, λ_text = 2.0, τ = 0.05.
+Key hyperparameters: LoRA rank 8, $\lambda_\text{dice}$ = 1.0, $\lambda_\text{sem}$ = 0.1, $\lambda_\text{text}$ = 3.0, $\tau$ = 0.05.
 
-After training, merge LoRA weights: `bash merge.sh`
+### Merging LoRA Weights
+
+After training, convert the DeepSpeed checkpoint and merge LoRA adapters before evaluation:
+
+```bash
+# Step 1: Convert DeepSpeed checkpoint to fp32
+cd runs/<exp_name>/ckpt
+python zero_to_fp32.py . ../pytorch_model.bin
+
+# Step 2: Merge LoRA adapters into the base model
+# Set the path to pytorch_model.bin in merge.sh, then run:
+bash merge.sh
+```
 
 ---
 
-## Evaluation
+## 📐 Evaluation
 
 See [`evaluation/README.md`](./evaluation/README.md) for the full guide.
 
@@ -328,7 +307,7 @@ python compute_css.py \
 
 ---
 
-## Interactive Inference
+## 💬 Interactive Inference
 
 ```bash
 python chat.py --version <merged_model> --precision bf16 --seg_prompt_mode fuse
@@ -336,7 +315,7 @@ python chat.py --version <merged_model> --precision bf16 --seg_prompt_mode fuse
 
 ---
 
-## Citation
+## 📝 Citation
 
 If you find this work useful, please cite:
 
@@ -344,7 +323,7 @@ If you find this work useful, please cite:
 @inproceedings{shang2026pixar,
   title     = {From Masks to Pixels and Meaning: A New Taxonomy, Benchmark, and Metrics for VLM Image Tampering},
   author    = {Shang, Xinyi and Tang, Yi and Cui, Jiacheng and Elhagry, Ahmed and Al Khatib, Salwa K. and Bsharat, Sondos Mahmoud and Liu, Jiacheng and Zhao, Xiaohan and Xue, Jing-Hao and Li, Hao and Khan, Salman and Shen, Zhiqiang},
-  booktitle = {European Conference on Computer Vision (ECCV)},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   year      = {2026}
 }
 ```

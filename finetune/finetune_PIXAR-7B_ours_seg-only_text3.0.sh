@@ -26,14 +26,14 @@
 ################################################################################
 BASE_DIR="/data/ironman/jiacheng/final_Omni_Data"
 
-GPU="localhost:4"
+GPU="localhost:5"
 PORT=12533
-VERSION="${BASE_DIR}/ck/PIXAR-7B"
-DATASET_DIR="${BASE_DIR}/train/ours_0.05"
-VAL_DATASET="${BASE_DIR}/train/ours_0.05/validation"
+VERSION="${BASE_DIR}/ck/SIDA-7B"
+DATASET_DIR="/data/thor/jiacheng/omni_backup/train/ours_0.1"
+VAL_DATASET="/data/thor/jiacheng/omni_backup/train/ours_0.1/validation"
 VISION_PRETRAINED="${BASE_DIR}/ck/sam_vit_h_4b8939.pth"
 LOG_BASE_DIR="${BASE_DIR}/runs"
-EXP_NAME="finetune_PIXAR-7B_ours_seg-only_text3.0"
+EXP_NAME="finetune_PIXAR-7B_tao0.1"
 
 BATCH_SIZE=2
 EPOCHS=20
@@ -43,7 +43,7 @@ PRECISION="bf16"
 
 DICE_LOSS_WEIGHT=1.0
 OBJ_LOSS_WEIGHT=0.5
-TEXT_LOSS_WEIGHT=4.0
+TEXT_LOSS_WEIGHT=3.0
 SEG_PROMPT_MODE="seg_only"
 MASK_TYPE="ours"          # "ours" -> gt_soft_mask, "others" -> gt_mask
 ################################################################################

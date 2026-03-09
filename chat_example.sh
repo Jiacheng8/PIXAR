@@ -2,9 +2,9 @@
 
 # Example script for running PIXAR Interactive Chat
 # Usage: bash chat_example.sh
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=4
 python chat.py \
-    --version /data/ironman/jiacheng/final_Omni_Data/ck/finetune_PIXAR-7B_ours_seg-only_text3.0\
+    --version path/to/PIXAR-7B\
     --vis_save_path ./vis_output \
     --precision bf16 \
     --image_size 1024 \
