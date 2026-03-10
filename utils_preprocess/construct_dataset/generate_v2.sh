@@ -7,10 +7,11 @@ cd /home/jiacheng/Omni_detection/PIXAR/utils_preprocess/construct_dataset || exi
 # -------------------------
 # Config
 # -------------------------
-DATASET_DIR="/data/ironman/jiacheng/final_Omni_Data/raw_outputs"
-OUT_DIR="/data/ironman/jiacheng/final_Omni_Data/train/ours"
+DATASET_DIR="/data/thor/jiacheng/omni_backup/raw_outputs"
+OUT_DIR="/data/thor/jiacheng/omni_backup/train/ours"
+DESCRIPTIONS_CSV="/home/jiacheng/Omni_detection/PIXAR/utils_preprocess/descriptions_train.csv"
 
-TAOS=(0.05)
+TAOS=(0.1)
 
 # 控制是否处理 validation mock (注入到 trainset 目录)
 PROCESS_VAL_MOCK=true  # 设置为 false 可以跳过 validation mock 处理
@@ -46,9 +47,9 @@ train_wo_anno_bg_ids=(
 #   coco_val_replacement_2
 # )
 
-val_w_anno_bg_ids=(
-  coco_val_removal_1
-)
+# val_w_anno_bg_ids=(
+#   coco_val_removal_1
+# )
 
 # val_wo_anno_ids=(
 #   coco_val_addition
@@ -57,9 +58,9 @@ val_w_anno_bg_ids=(
 #   coco_val_material
 # )
 
-# val_wo_anno_bg_ids=(
-  # coco_val_background  # 如果需要可以取消注释
-# )
+val_wo_anno_bg_ids=(
+  seedream_coco_val_background  # 如果需要可以取消注释
+)
 
 # -------------------------
 # Logging helpers
@@ -67,19 +68,19 @@ val_w_anno_bg_ids=(
 RUN_ID="$(date +%Y%m%d_%H%M%S)"
 LOG_DIR="./logs"
 mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/construct_unified_${RUN_ID}.log"
+LOG_FILE="${LOG_DIR}/construct_unified_text_${RUN_ID}.log"
 
 ts() { date +"%F %T"; }
 
 h1() {
   echo -e "\n========================================" | tee -a "$LOG_FILE"
-  echo -e "🚀 $1" | tee -a "$LOG_FILE"
+  echo -e "🚀 [$(ts)] $1" | tee -a "$LOG_FILE"
   echo -e "========================================" | tee -a "$LOG_FILE"
 }
 
 h2() {
   echo -e "\n----------------------------------------" | tee -a "$LOG_FILE"
-  echo -e "📌 $1" | tee -a "$LOG_FILE"
+  echo -e "📌 [$(ts)] $1" | tee -a "$LOG_FILE"
   echo -e "----------------------------------------" | tee -a "$LOG_FILE"
 }
 
@@ -89,7 +90,7 @@ log() {
 }
 
 # -------------------------
-# Runner (使用统一脚本 2_construct_dataset.py)
+# Runner (使用统一脚本 2_construct_dataset_text.py)
 # -------------------------
 OK=0
 FAIL=0
@@ -101,8 +102,8 @@ run_one () {
   local bg_flag="$4"    # "true" or "false"
   local dest_type="$5"  # "train" or "validation"
 
-  # 构建参数
-  local cmd="python 2_construct_dataset.py --id \"$id\" --tao \"$tao\" --dataset-dir \"$DATASET_DIR\" --output-dir \"$OUT_DIR\" --dest-type \"$dest_type\""
+  # 构建参数 - 使用 2_construct_dataset_text.py
+  local cmd="python 2_construct_dataset_text.py --id \"$id\" --tao \"$tao\" --dataset-dir \"$DATASET_DIR\" --output-dir \"$OUT_DIR\" --dest-type \"$dest_type\" --descriptions-csv \"$DESCRIPTIONS_CSV\""
 
   if [[ "$anno_flag" == "true" ]]; then
     cmd="$cmd --anno"
@@ -139,13 +140,14 @@ run_one () {
 # -------------------------
 # Main
 # -------------------------
-h1 "Construct Dataset Batch (run_id=${RUN_ID}) - Using Unified Script"
+h1 "Construct Dataset Batch (run_id=${RUN_ID}) - Using Unified Script with Text Descriptions"
 log "📂 workdir=$(pwd)"
 log "📥 dataset_dir=${DATASET_DIR}"
 log "📦 output_dir=${OUT_DIR}"
+log "📄 descriptions_csv=${DESCRIPTIONS_CSV}"
 log "🧪 taos=${TAOS[*]}"
 log "📝 log_file=${LOG_FILE}"
-log "🔧 Using unified script: 2_construct_dataset.py"
+log "🔧 Using unified script: 2_construct_dataset_text.py"
 log "🔧 Process validation mock: ${PROCESS_VAL_MOCK}"
 
 for tao in "${TAOS[@]}"; do
@@ -176,9 +178,9 @@ for tao in "${TAOS[@]}"; do
   if [[ "$PROCESS_VAL_MOCK" == "true" ]]; then
     h1 "TAO=${tao} | Processing VALIDATION MOCK data (injected into trainset)"
 
-    h2 "TAO=${tao} | Validation w/ anno bg (--anno --bg)"
-    for id in "${val_w_anno_bg_ids[@]}"; do
-      run_one "$id" "$tao" "true" "true" "validation"
+    h2 "TAO=${tao} | Validation w/o anno bg (--bg)"
+    for id in "${val_wo_anno_bg_ids[@]}"; do
+      run_one "$id" "$tao" "false" "true" "validation"
     done
   else
     log "⏭️  Skipping validation mock processing (PROCESS_VAL_MOCK=false)"
