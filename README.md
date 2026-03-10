@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/logo.svg" alt="PIXAR Logo" height="80">
+<img src="./assets/logo.png" alt="PIXAR Logo" height="80">
 
 # From Masks to Pixels and Meaning
 ### A New Taxonomy, Benchmark, and Metrics for VLM Image Tampering
