@@ -15,8 +15,8 @@ def load_json(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("dir_a", help="First metadata directory")
-    ap.add_argument("dir_b", help="Second metadata directory")
+    ap.add_argument("dir_a", default="/data/ironman/jiacheng/final_Omni_Data/train/ours_0.05/train/metadata", help="First metadata directory")
+    ap.add_argument("dir_b", default="/data/thor/jiacheng/omni_backup/train/ours_0.1/train/metadata", help="Second metadata directory")
     args = ap.parse_args()
 
     files_a = set(f for f in os.listdir(args.dir_a) if f.endswith(".json"))
