@@ -8,9 +8,9 @@
 <p>
   <a href=""><img src="https://img.shields.io/badge/Paper-PDF-blue?style=for-the-badge&logo=adobeacrobatreader" alt="Paper"></a>
   &nbsp;
-  <a href="https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=sharing"><img src="https://img.shields.io/badge/Dataset-Google%20Drive-yellow?style=for-the-badge&logo=googledrive" alt="Dataset"></a>
+  <a href="https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=drive_link"><img src="https://img.shields.io/badge/Dataset-Google%20Drive-yellow?style=for-the-badge&logo=googledrive" alt="Dataset"></a>
   &nbsp;
-  <a href="https://huggingface.co/saberzl/SIDA-7B"><img src="https://img.shields.io/badge/Model-HuggingFace-orange?style=for-the-badge&logo=huggingface" alt="Model"></a>
+  <a href="https://huggingface.co/jiachengcui888/PIXAR-7B"><img src="https://img.shields.io/badge/Model-HuggingFace-orange?style=for-the-badge&logo=huggingface" alt="Model"></a>
   &nbsp;
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-lightgrey?style=for-the-badge" alt="License"></a>
 </p>
