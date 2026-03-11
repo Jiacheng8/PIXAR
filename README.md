@@ -8,7 +8,7 @@
 <p>
   <a href=""><img src="https://img.shields.io/badge/Paper-PDF-blue?style=for-the-badge&logo=adobeacrobatreader" alt="Paper"></a>
   &nbsp;
-  <a href="https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=drive_link"><img src="https://img.shields.io/badge/Dataset-Google%20Drive-yellow?style=for-the-badge&logo=googledrive" alt="Dataset"></a>
+  <a href="https://drive.google.com/drive/folders/1Zwhi403Ozy26cR1CW7EfuomFnE9qDmze?usp=drive_link"><img src="https://img.shields.io/badge/Dataset-Google%20Drive-yellow?style=for-the-badge&logo=googledrive" alt="Dataset"></a>
   &nbsp;
   <a href="https://huggingface.co/jiachengcui888/PIXAR-7B"><img src="https://img.shields.io/badge/Model-HuggingFace-orange?style=for-the-badge&logo=huggingface" alt="Model"></a>
   &nbsp;
@@ -141,8 +141,9 @@ The `[SEG]` token embedding can be fused with the generated text description in 
 - **`finetune/`** — DeepSpeed training scripts for various LoRA and hyperparameter configurations.
 - **`evaluation/`** — Evaluation launchers and metrics; `text_eval/compute_css.py` scores descriptions via CSS.
 - **`utils/`** — Dataset class, IoU metrics, and distributed batch sampler.
-- **`download-data/`** — rclone scripts to download and extract the raw PIXAR dataset from Google Drive.
-- **`utils_preprocess/`** — Builds the dataset from raw image pairs: generates pixel-difference maps and labels at any $\tau$.
+- **`preprocess_raw/`** — End-to-end dataset preprocessing pipeline:
+  - **`1_download-data/`** — rclone scripts to download and extract the raw PIXAR dataset from Google Drive.
+  - **`2_construct_dataset/`** — Builds the dataset from raw image pairs: generates pixel-difference maps and labels at any $\tau$.
 - **`train_PIXAR.py`** — Main training entry point.
 - **`test_parallel.py`** — Multi-GPU parallel evaluation.
 - **`chat.py`** — Interactive single-image inference.
@@ -191,7 +192,7 @@ See the [Data](#-data) section below.
 We provide two ways to obtain the PIXAR dataset:
 
 > **Option A — Download preprocessed data (recommended)**
-> Training and test sets preprocessed at $\tau$ = 0.05 are available on [Google Drive](https://drive.google.com/drive/folders/1BVGynhPqKCRJDtbJKmMQZFdHFtZ2qUj8?usp=sharing).
+> Training and test sets preprocessed at $\tau$ = 0.05 are available on [Google Drive](https://drive.google.com/drive/folders/1Zwhi403Ozy26cR1CW7EfuomFnE9qDmze?usp=drive_link).
 
 > **Option B — Build from raw data with a custom $\tau$**
 > We release the raw image pairs alongside the pixel-difference maps, allowing labels to be re-derived at any $\tau$. See [Custom Dataset Processing](#custom-dataset-processing) for details.
@@ -217,15 +218,15 @@ If you want to build the dataset from scratch at a different $\tau$, follow thes
 
 **Step 1 — Download raw data**
 
-Follow [`download-data/README.md`](./download-data/README.md) to configure rclone, populate `download-data/files.txt` with the raw zip filenames, and run:
+Follow [`preprocess_raw/1_download-data/README.md`](./preprocess_raw/1_download-data/README.md) to configure rclone, populate `preprocess_raw/1_download-data/files.txt` with the raw zip filenames, and run:
 
 ```bash
-bash download-data/download.sh
+bash preprocess_raw/1_download-data/download.sh
 ```
 
 **Step 2 — Build dataset at your preferred $\tau$**
 
-Edit the config block in `utils_preprocess/construct_dataset/generate_v2.sh`:
+Edit the config block in `preprocess_raw/2_construct_dataset/generate_v2.sh`:
 
 ```bash
 DATASET_DIR="/path/to/raw_outputs"   # output of download.sh
@@ -236,7 +237,7 @@ TAOS=(0.05)                          # e.g. (0.01) (0.1) (0.2) or multiple value
 Then run:
 
 ```bash
-cd utils_preprocess/construct_dataset
+cd preprocess_raw/2_construct_dataset
 
 bash generate_v2.sh          # mask-only labels
 bash generate_v2-text.sh     # labels + text descriptions (requires descriptions.csv)

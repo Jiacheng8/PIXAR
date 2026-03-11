@@ -16,13 +16,13 @@ rclone config
 ```
 
 Follow the prompts:
-1. Select `n` for new remote
+1. Select `n` to create a new remote
 2. Name it `gdrive`
 3. Select `drive` as the storage type
-4. Follow the OAuth flow to authorize access to your Google account
-5. Leave other options as default and confirm
+4. Complete the OAuth flow to authorize access to your Google account
+5. Leave all other options as default and confirm
 
-Verify the connection works:
+Verify the connection:
 
 ```bash
 rclone ls gdrive:
@@ -30,38 +30,38 @@ rclone ls gdrive:
 
 ---
 
-## Step 2: Copy file names from Google Drive
+## Step 2: Copy files from Google Drive
 
-Go to the shared Google Drive folder:
+Open the shared Google Drive folder:
 
 [https://drive.google.com/drive/folders/1WMZtwoAmxtbmu3WDWbJVdYetsJ9eVFXR?usp=sharing](https://drive.google.com/drive/folders/1WMZtwoAmxtbmu3WDWbJVdYetsJ9eVFXR?usp=sharing)
 
-Browse the raw files you want to download and note their exact filenames (including the `.zip` extension).
+Add all the files to your own Google Drive (via "Make a copy").
 
 ---
 
-## Step 3: Populate files.txt
+## Step 3: Populate `files.txt`
 
-Edit `files.txt` and add one filename per line, for example:
+Edit `files.txt` and list the filenames you want to download, one per line:
 
 ```
 gpt_balanced_20260225_110457.zip
 gemini_balanced_20260225_110457.zip
 ```
 
-Blank lines and non-`.zip` entries will be skipped automatically.
+Blank lines and entries that do not end in `.zip` are skipped automatically.
 
 ---
 
-## Step 4: Configure download.sh
+## Step 4: Configure `download.sh`
 
-Open `download.sh` and update the following variables at the top of the file:
+Open `download.sh` and update the variables at the top of the file:
 
 | Variable | Description |
 |---|---|
-| `REMOTE_BASE` | The path inside your Google Drive where the raw zip files are stored (relative to the rclone remote root). Change this if the files are located in a different folder on Drive. |
-| `OUT_DIR` | The local directory where zip files will be **extracted**. All downloaded archives are unzipped here. |
-| `DOWNLOAD_DIR` | The local **temporary** directory where zip files are saved before extraction. Zips are deleted after successful extraction. |
+| `REMOTE_BASE` | Path inside your Google Drive where the zip files are stored (relative to the rclone remote root). |
+| `OUT_DIR` | Local directory where zip files will be **extracted**. |
+| `DOWNLOAD_DIR` | Local **temporary** directory where zip files are saved before extraction. Zips are deleted after successful extraction. |
 
 Example:
 

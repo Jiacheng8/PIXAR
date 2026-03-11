@@ -1,6 +1,6 @@
 # Dataset Construction
 
-This directory contains all scripts needed to build the **PIXAR dataset** from raw image pairs at a chosen pixel-difference threshold τ. The pipeline computes per-pixel difference maps between original and AI-generated images, thresholds them to derive soft masks $M_\tau$, and assembles the final training/test splits with optional text descriptions.
+This directory contains all scripts needed to build the **PIXAR dataset** from raw image pairs at a chosen pixel-difference threshold τ. The pipeline computes per-pixel difference maps between original and AI-generated images, thresholds them to produce soft masks $M_\tau$, and assembles the final training/test splits with optional text descriptions.
 
 ---
 
@@ -8,13 +8,13 @@ This directory contains all scripts needed to build the **PIXAR dataset** from r
 
 | File / Folder | Description |
 |---|---|
-| `2_construct_dataset_text.py` | Core processing script — computes diff maps, writes masks, metadata (class labels + text descriptions from CSV) |
+| `2_construct_dataset_text.py` | Core processing script — computes diff maps, writes masks and metadata (class labels + text descriptions from CSV) |
 | `generate_v2.sh` | Batch runner for the **training set** (mask-only labels, no text) |
 | `generate_v2-text.sh` | Batch runner for the **training set** (masks + text descriptions) |
-| `generate_v2-text-val.sh` | Batch runner for the **test set** — single generative source, configurable via `TYPE` variable |
-| `generate_v2-text-val_all.sh` | Convenience wrapper that runs all per-source test scripts in sequence |
+| `generate_v2-text-val.sh` | Batch runner for the **test set** — single generative source, configurable via the `TYPE` variable |
+| `generate_v2-text-val_all.sh` | Convenience wrapper that runs all per-source test set scripts in sequence |
 | `rebuild_descriptions_csv.py` / `.sh` | Rebuilds the descriptions CSV from existing metadata if needed |
-| `verify_metadata.py` / `.sh` | Verifies integrity of generated metadata JSONs |
+| `verify_metadata.py` / `.sh` | Verifies the integrity of generated metadata JSONs |
 | `logs/` | Runtime logs (one file per run, named by timestamp) |
 
 ---
@@ -114,7 +114,7 @@ Test splits follow the same structure, prefixed with the generative source name 
 Multiple τ values can be processed in a single run:
 
 ```bash
-TAOS=(0.01 0.05 0.1)
+TAOS=(0.5 0.1 0.2)
 ```
 
 ---
@@ -135,11 +135,3 @@ OUT_DIR/
 ```
 
 Each run writes a timestamped log to `logs/construct_unified_text_<YYYYMMDD_HHMMSS>.log`.
-
----
-
-## Notes
-
-- Scripts use `set -u` (but not `-e`) so that a single failed sample does not abort the entire batch. Failed samples are logged with `❌` and the script exits with code 1 at the end if any failures occurred, making it CI-friendly.
-- If AI-generated images have a different resolution from the originals, `2_construct_dataset_text.py` will automatically resize them before computing the diff map.
-- Use `verify_metadata.py` / `verify_metadata.sh` to sanity-check the generated metadata after a run.
