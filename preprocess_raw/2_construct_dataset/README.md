@@ -21,6 +21,10 @@ This directory contains all scripts needed to build the **PIXAR dataset** from r
 
 ## Quick Start
 
+### Step 0 — Download description CSV files
+
+Download the description CSV files from [Google Drive](https://drive.google.com/drive/folders/1ESIQziludQuW_ECGh_xWCP8IOKU-mKe1?usp=drive_link) and place them in a local directory. These files provide the natural language descriptions used during dataset construction.
+
 ### Step 1 — Build the training set
 
 Open `generate_v2-text.sh` (with text descriptions) or `generate_v2.sh` (mask-only) and edit the config block at the top:
