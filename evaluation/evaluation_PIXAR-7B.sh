@@ -10,8 +10,8 @@
 
 # ---------- Paths (modify these) ----------
 MAIN_DIR="/data/ironman/jiacheng/final_Omni_Data"
-VERSION="finetune_PIXAR-7B_ours_seg-only_text3.0"
-GPU="1"
+VERSION="PIXAR-7B"
+GPU="0"
 SEG_PROMPT_MODE="seg_only"          # seg_only | text_only | fuse
 
 VERSION_DIR="${MAIN_DIR}/ck/${VERSION}"

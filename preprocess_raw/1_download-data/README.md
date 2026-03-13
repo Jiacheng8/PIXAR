@@ -34,7 +34,7 @@ rclone ls gdrive:
 
 Open the shared Google Drive folder:
 
-[https://drive.google.com/drive/folders/1WMZtwoAmxtbmu3WDWbJVdYetsJ9eVFXR?usp=sharing](https://drive.google.com/drive/folders/1WMZtwoAmxtbmu3WDWbJVdYetsJ9eVFXR?usp=sharing)
+[https://drive.google.com/drive/folders/1WMZtwoAmxtbmu3WDWbJVdYetsJ9eVFXR?usp=drive_link](https://drive.google.com/drive/folders/1WMZtwoAmxtbmu3WDWbJVdYetsJ9eVFXR?usp=drive_link)
 
 Add all the files to your own Google Drive (via "Make a copy").
 

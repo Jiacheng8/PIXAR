@@ -2,7 +2,7 @@
 
 The full pipeline for constructing our benchmark consists of two steps. However, we **recommend downloading the preprocessed dataset directly** from the link below:
 
-[https://drive.google.com/drive/folders/1Zwhi403Ozy26cR1CW7EfuomFnE9qDmze?usp=drive_link](https://drive.google.com/drive/folders/1Zwhi403Ozy26cR1CW7EfuomFnE9qDmze?usp=drive_link)
+[https://drive.google.com/drive/folders/1Zwhi403Ozy26cR1CW7EfuomFnE9qDmze?usp=sharing](https://drive.google.com/drive/folders/1Zwhi403Ozy26cR1CW7EfuomFnE9qDmze?usp=sharing)
 
 ---
 
